@@ -21,6 +21,24 @@ Services and ports:
 The API container runs `alembic upgrade head` before starting; a fresh clone
 reaches a working stack with no manual database steps.
 
+## Joining from a phone / another LAN device
+
+1. Set `LIVEKIT_NODE_IP` in `.env` to this machine's LAN IP and
+   `OPENVOICE_LIVEKIT_WS_URL=wss://<lan-ip>:7443`, then
+   `docker compose -f docker-compose.dev.yml up -d --force-recreate caddy api`.
+2. On the phone, visit `https://<lan-ip>:8443` **and** `https://<lan-ip>:7443`
+   once each and accept the certificate warning (Caddy's internal CA; the
+   second one is required or the voice WebSocket fails silently).
+3. Use `https://<lan-ip>:8443` — microphone access requires a secure origin,
+   which is why plain `http://<lan-ip>:8080` shows no devices off-machine.
+4. Sign in with a **different username per device**: one account = one voice
+   identity, and a second connection with the same identity replaces the
+   first (you get "kicked"). Per-device identities arrive with the M2 device
+   model.
+5. If the page doesn't load at all, allow the ports through Windows
+   Defender Firewall (admin PowerShell):
+   `New-NetFirewallRule -DisplayName "Openvoice dev" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8080,8443,7443,7880,7881` and the same with `-Protocol UDP -LocalPort 3478,50000-50100,30000-30100`.
+
 ## Everyday commands
 
 ```sh
