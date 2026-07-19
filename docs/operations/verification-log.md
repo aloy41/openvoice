@@ -177,6 +177,23 @@ Remaining for full M3: MLS-based automatic group keying (per-device
 identities, epoch rotation on membership change, verification states) and
 ciphertext message envelopes.
 
+### E2EE text messages — Milestone 3 slice 2 (2026-07-19, ADR-0006)
+
+Client-side AES-GCM + PBKDF2 message envelopes (Web Crypto, no custom
+crypto). Messages carry a `scheme` (plaintext | passphrase-v1); the server
+stores/returns the opaque envelope verbatim, validates only the scheme enum
+(migration 0005 adds the column and widens content to 8000). Per-community
+passphrase held in browser memory; decryption failures render a locked
+placeholder, never throw.
+
+Verified: 6 envelope unit tests (round-trip, wrong-key → null, ciphertext
+never contains plaintext, fresh salt/iv); an API test asserts the DB row is
+exactly the ciphertext under the encrypted scheme and rejects unknown
+schemes; e2e `e2ee-text.spec.ts` proves same-passphrase clients read the
+text while the API response (the server's own view) contains only the
+ciphertext envelope and a wrong-passphrase member sees a locked placeholder.
+Full suite: 81 API tests, e2e 11/11, 23 web unit tests, build clean.
+
 **Not yet verified** (open Milestone 1 exit items):
 - TURN over **TLS** for the most restrictive networks — requires a domain and
   real certificate; part of the hardened production deployment (M4).

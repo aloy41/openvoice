@@ -221,11 +221,11 @@ class Ban(Base):
 
 
 class Message(Base):
-    """Text-channel message. Content is currently transport-encrypted only
-    (never claimed otherwise in the UI); Milestone 3 replaces the content
-    column with a ciphertext envelope. Deletion tombstones the row (content
-    cleared, deleted_at set) so ordering and edit history semantics stay
-    stable."""
+    """Text-channel message. `scheme` is "plaintext" (transport-encrypted
+    only) or "passphrase-v1" (client-side AES-GCM ciphertext envelope the
+    server can neither read nor derive the key for). Deletion tombstones the
+    row (content cleared, deleted_at set) so ordering and edit history
+    semantics stay stable."""
 
     __tablename__ = "messages"
 
@@ -239,7 +239,10 @@ class Message(Base):
     author_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    content: Mapped[str] = mapped_column(String(4000), nullable=False)
+    scheme: Mapped[str] = mapped_column(
+        String(24), nullable=False, server_default=text("'plaintext'")
+    )
+    content: Mapped[str] = mapped_column(String(8000), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

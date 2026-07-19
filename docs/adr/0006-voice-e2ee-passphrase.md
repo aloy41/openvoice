@@ -1,7 +1,10 @@
-# ADR-0006: Voice E2EE via passphrase-keyed LiveKit frame encryption (alpha)
+# ADR-0006: E2EE via passphrase-keyed encryption (alpha) — voice and text
 
 - Status: accepted
 - Date: 2026-07-19
+- Scope note: originally voice-only; extended the same day to cover text
+  messages (see "Text messages" below). MLS-based automatic group keying
+  replaces the manual passphrase for both in the M3 completion.
 
 ## Context
 
@@ -61,6 +64,27 @@ MLS (RFC 9420) via an audited implementation for automatic group keying
 with per-device credentials, epoch rotation on membership change, and
 verification states — replacing the passphrase for dynamic groups. Text
 message E2EE (ciphertext envelopes) ships alongside that key layer.
+
+## Text messages (same mechanism, added 2026-07-19)
+
+- Client-side AES-GCM with a PBKDF2-derived key via Web Crypto
+  (`apps/web/src/crypto/envelope.ts`) — no custom crypto. The passphrase is
+  per-community, entered in the channel header, held in browser memory only.
+- Messages carry a `scheme`: `plaintext` (transport-only, server-readable) or
+  `passphrase-v1` (the `content` column holds the opaque base64 envelope).
+  The server stores and returns `content` verbatim, validates only the
+  scheme enum, and has no code path that decrypts or derives the key.
+- Wrong passphrase / no passphrase → the message renders as a locked
+  placeholder, never the plaintext. Decryption failures return null, never
+  throw.
+- Same honest limits as voice: shared out-of-band, no rotation on membership
+  change, no per-device identity. Deletion still tombstones (content cleared).
+- Verified by `tests/e2e/e2ee-text.spec.ts`: same-passphrase clients read the
+  text; the API response (exactly what the server holds) contains only the
+  ciphertext envelope, never the plaintext; a wrong-passphrase member sees the
+  locked placeholder. Envelope unit tests in
+  `apps/web/src/crypto/__tests__/envelope.test.ts` assert round-trip,
+  wrong-key null, and that ciphertext never contains the plaintext.
 
 ## Consequences
 

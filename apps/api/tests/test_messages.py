@@ -118,6 +118,50 @@ async def test_send_requires_capability_and_membership(app: FastAPI, clean_db: N
         assert refused.json()["capability"] == "SEND_MESSAGES"
 
 
+async def test_encrypted_scheme_stored_verbatim_and_opaque(app: FastAPI, clean_db: None) -> None:
+    import os
+
+    from sqlalchemy import text as sql_text
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    async with user_client(app, uname("owner")) as owner:
+        detail = await create_community(owner)
+        channel_id = await text_channel_of(owner, detail["community"]["id"])
+        # The client would send a real AES-GCM envelope; the server treats it
+        # as opaque, so any base64-ish blob exercises the same path.
+        envelope = "eyJ2IjoxLCJhbGciOiJBRVMtR0NNIiwiY3QiOiJZbXhoWWc9PSJ9"
+        resp = await owner.post(
+            f"/api/v1/channels/{channel_id}/messages",
+            json={"content": envelope, "scheme": "passphrase-v1"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["scheme"] == "passphrase-v1"
+        assert resp.json()["content"] == envelope
+
+        # The stored row is exactly the ciphertext — no plaintext column.
+        engine = create_async_engine(os.environ["OPENVOICE_TEST_DATABASE_URL"])
+        async with engine.connect() as conn:
+            row = (
+                await conn.execute(
+                    sql_text("SELECT scheme, content FROM messages ORDER BY id DESC LIMIT 1")
+                )
+            ).first()
+        await engine.dispose()
+        assert row is not None
+        assert row[0] == "passphrase-v1"
+        assert row[1] == envelope
+
+    # An unknown scheme is rejected (the enum is the contract).
+    async with user_client(app, uname("owner2")) as owner2:
+        detail = await create_community(owner2)
+        channel_id = await text_channel_of(owner2, detail["community"]["id"])
+        bad = await owner2.post(
+            f"/api/v1/channels/{channel_id}/messages",
+            json={"content": "x", "scheme": "rot13"},
+        )
+        assert bad.status_code == 422
+
+
 async def test_voice_channel_rejects_messages(app: FastAPI, clean_db: None) -> None:
     async with user_client(app, uname("owner")) as owner:
         detail = await create_community(owner)

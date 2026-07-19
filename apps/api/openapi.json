@@ -696,9 +696,15 @@
       "MessageCreate": {
         "properties": {
           "content": {
-            "maxLength": 4000,
+            "maxLength": 8000,
             "minLength": 1,
             "title": "Content",
+            "type": "string"
+          },
+          "scheme": {
+            "default": "plaintext",
+            "pattern": "^(plaintext|passphrase-v1)$",
+            "title": "Scheme",
             "type": "string"
           }
         },
@@ -782,6 +788,10 @@
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "scheme": {
+            "title": "Scheme",
+            "type": "string"
           }
         },
         "required": [
@@ -789,6 +799,7 @@
           "channel_id",
           "author_id",
           "author_name",
+          "scheme",
           "content",
           "created_at",
           "edited_at",
@@ -800,9 +811,15 @@
       "MessagePatch": {
         "properties": {
           "content": {
-            "maxLength": 4000,
+            "maxLength": 8000,
             "minLength": 1,
             "title": "Content",
+            "type": "string"
+          },
+          "scheme": {
+            "default": "plaintext",
+            "pattern": "^(plaintext|passphrase-v1)$",
+            "title": "Scheme",
             "type": "string"
           }
         },

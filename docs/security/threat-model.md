@@ -20,7 +20,12 @@ gate). Sections marked *(M3)* are gates for that milestone.
 - Voice media, default: WebRTC transport encryption (DTLS-SRTP) between
   each client and the LiveKit SFU. **Without a passphrase the SFU can
   access media and the UI says so.**
-- Text messaging: not implemented yet.
+- Text messaging: opt-in E2EE (ADR-0006). With a per-community passphrase,
+  message content is AES-GCM ciphertext produced client-side (Web Crypto);
+  the server stores/returns the opaque envelope and cannot read it (verified
+  by e2e — the API response contains only ciphertext). Without a passphrase,
+  messages are transport-encrypted only and server-readable. Same limits as
+  voice E2EE; MLS replaces the manual passphrase later.
 - Authentication: production password accounts (Argon2id, HttpOnly cookie
   sessions with hashed server-side secrets, double-submit CSRF, Redis rate
   limiting, immediate revocation — ADR-0004) plus the development-only

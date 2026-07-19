@@ -94,10 +94,10 @@ export function useSendMessage(channelId: string | null) {
         return [...old, message];
       });
     },
-    mutationFn: async (content: string) => {
+    mutationFn: async (args: { content: string; scheme?: "plaintext" | "passphrase-v1" }) => {
       const { data, error } = await api.POST("/api/v1/channels/{channel_id}/messages", {
         params: { path: { channel_id: channelId! } },
-        body: { content },
+        body: { content: args.content, scheme: args.scheme ?? "plaintext" },
       });
       if (error || !data) {
         const code = (error as { code?: string } | null)?.code;
@@ -116,10 +116,14 @@ export function useSendMessage(channelId: string | null) {
 
 export function useEditMessage() {
   return useMutation({
-    mutationFn: async (args: { messageId: string; content: string }) => {
+    mutationFn: async (args: {
+      messageId: string;
+      content: string;
+      scheme?: "plaintext" | "passphrase-v1";
+    }) => {
       const { data, error } = await api.PATCH("/api/v1/messages/{message_id}", {
         params: { path: { message_id: args.messageId } },
-        body: { content: args.content },
+        body: { content: args.content, scheme: args.scheme ?? "plaintext" },
       });
       if (error || !data) throw new Error("The edit could not be saved.");
       return data;
