@@ -30,6 +30,12 @@ gate). Sections marked *(M3)* are gates for that milestone.
   sessions with hashed server-side secrets, double-submit CSRF, Redis rate
   limiting, immediate revocation — ADR-0004) plus the development-only
   shared-password login, which is refused in production mode at startup.
+- Per-device identity (ADR-0007): each browser holds a non-extractable
+  ECDSA P-256 private key in IndexedDB (never transmitted); only the public
+  key is registered, and devices can be listed and revoked. Identity/
+  foundation only — not yet used to protect content (that is the MLS work).
+  Storage caveat: clearing browser storage loses the key; the user registers
+  a new device. Desktop will use OS secure storage.
 - No security review or audit has occurred.
 
 ## Assets

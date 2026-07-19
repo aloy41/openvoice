@@ -194,6 +194,22 @@ text while the API response (the server's own view) contains only the
 ciphertext envelope and a wrong-passphrase member sees a locked placeholder.
 Full suite: 81 API tests, e2e 11/11, 23 web unit tests, build clean.
 
+### Per-device identity — required MVP feature + MLS foundation (2026-07-19, ADR-0007)
+
+ECDSA P-256 keypair per browser (Web Crypto); private key non-extractable in
+IndexedDB, never transmitted; SPKI public key registered. `devices` table
+(migration 0006) with idempotent registration, revoked-key rejection, listing,
+soft revocation. Web: auto-register on sign-in/restore, "Devices" dialog with
+current-device marking and revoke. Verified: 5 API tests (idempotency,
+revoked-key 403, cross-user isolation, CSRF, auth); 2 e2e (registration
+payload proven to carry only a public key — no "private" field; device key
+persists across reload as the same single device). Full suite 86 API tests,
+e2e 13/13, 23 web unit tests, build clean.
+
+Also fixed a pre-existing e2e flake: real-media tests were over-parallelized,
+starving server-side voice-activity timing under CPU load. Capped workers
+(3 local / 2 CI) with one retry — suite is now reliable AND faster (15s).
+
 **Not yet verified** (open Milestone 1 exit items):
 - TURN over **TLS** for the most restrictive networks — requires a domain and
   real certificate; part of the hardened production deployment (M4).
