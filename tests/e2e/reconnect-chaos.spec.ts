@@ -9,19 +9,18 @@
 import { execSync } from "node:child_process";
 import { expect, test } from "@playwright/test";
 
-import { joinVoice, registerAndSignIn } from "./helpers";
+import { setUpOwnerInVoice, uniqueName } from "./helpers";
 
 const LIVEKIT_CONTAINER = process.env.LIVEKIT_CONTAINER ?? "openvoice-dev-livekit-1";
 
 test.skip(process.env.RUN_CHAOS !== "1", "set RUN_CHAOS=1 to run docker-restart chaos tests");
 
 test("client shows reconnecting and recovers after an SFU restart", async ({ browser }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(150_000);
   const ctx = await browser.newContext({ permissions: ["microphone"] });
   const page = await ctx.newPage();
 
-  await registerAndSignIn(page, "chaos");
-  await joinVoice(page);
+  await setUpOwnerInVoice(page, "chaos", `Chaos ${uniqueName("lab")}`);
 
   execSync(`docker restart ${LIVEKIT_CONTAINER}`, { stdio: "inherit", timeout: 60_000 });
 

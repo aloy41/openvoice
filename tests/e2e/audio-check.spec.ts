@@ -1,5 +1,6 @@
 /**
- * Audio feedback regression tests.
+ * Audio feedback regression tests, run inside a real voice-channel
+ * workspace.
  *
  * The mic test must show a live input level (Chromium's fake capture file is
  * a 440 Hz tone) and must KEEP running after first use — granting permission
@@ -7,15 +8,22 @@
  * previously self-stopped the test and made it look like the mic was dead.
  */
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
 
-import { registerAndSignIn } from "./helpers";
+import { createCommunity, openVoiceChannel, registerAndSignIn, uniqueName } from "./helpers";
+
+async function openWorkspace(page: Page, prefix: string) {
+  await registerAndSignIn(page, prefix);
+  await createCommunity(page, `Audio ${uniqueName(prefix)}`);
+  await openVoiceChannel(page);
+}
 
 test("mic test shows a live level and survives the permission-grant device refresh", async ({
   browser,
 }) => {
   const ctx = await browser.newContext({ permissions: ["microphone"] });
   const page = await ctx.newPage();
-  await registerAndSignIn(page, "audio-a");
+  await openWorkspace(page, "audio-a");
 
   await page.getByRole("button", { name: "Test microphone" }).click();
 
@@ -40,7 +48,7 @@ test("mic test shows a live level and survives the permission-grant device refre
 test("output test plays a chime without error", async ({ browser }) => {
   const ctx = await browser.newContext({ permissions: ["microphone"] });
   const page = await ctx.newPage();
-  await registerAndSignIn(page, "audio-b");
+  await openWorkspace(page, "audio-b");
 
   await page.getByRole("button", { name: "Play test sound" }).click();
   // The chime lasts ~0.8 s; the button re-enables when it finishes and no

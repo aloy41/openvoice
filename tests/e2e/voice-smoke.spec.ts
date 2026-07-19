@@ -1,31 +1,38 @@
 /**
- * Two-client voice smoke test against the full dev stack (Caddy, API,
- * PostgreSQL, Redis, LiveKit). Requires:
- *   docker compose -f docker-compose.dev.yml up
- * Chromium runs with fake media devices, so real audio hardware is not needed.
+ * Core product smoke test against the full dev stack: account creation →
+ * community creation → invite → second user joins → both enter an authorized
+ * voice channel → mute propagates → leave. Chromium runs with fake media
+ * devices, so real audio hardware is not needed.
  */
 import { expect, test } from "@playwright/test";
 
-import { joinVoice, registerAndSignIn } from "./helpers";
+import {
+  registerAndSignIn,
+  setUpGuestInVoice,
+  setUpOwnerInVoice,
+  uniqueName,
+} from "./helpers";
 
-test("two clients join the dev voice room, see each other, mute, and leave", async ({
-  browser,
-}) => {
+test("invite flow: two clients meet in an authorized voice channel", async ({ browser }) => {
+  test.setTimeout(90_000);
   const contextA = await browser.newContext({ permissions: ["microphone"] });
   const contextB = await browser.newContext({ permissions: ["microphone"] });
   const alice = await contextA.newPage();
   const bob = await contextB.newPage();
 
-  const aliceName = await registerAndSignIn(alice, "smoke-alice");
-  const bobName = await registerAndSignIn(bob, "smoke-bob");
+  const communityName = `Smoke ${uniqueName("hq")}`;
+  const { username: aliceName, inviteCode } = await setUpOwnerInVoice(
+    alice,
+    "smoke-alice",
+    communityName,
+  );
 
-  // The honest encryption state is visible before and during the call.
+  // The honest encryption state is visible in the workspace.
   await expect(alice.getByRole("note", { name: "Encryption status" })).toContainText(
     "not end-to-end encrypted",
   );
 
-  await joinVoice(alice);
-  await joinVoice(bob);
+  const bobName = await setUpGuestInVoice(bob, "smoke-bob", inviteCode, communityName);
 
   const listA = alice.getByRole("list", { name: "Participants" });
   await expect(listA).toContainText(aliceName, { timeout: 15_000 });
@@ -51,7 +58,7 @@ test("two clients join the dev voice room, see each other, mute, and leave", asy
   );
 
   // Leaving returns to a joinable state.
-  await alice.getByRole("button", { name: "Leave" }).click();
+  await alice.getByRole("button", { name: "Leave" }).first().click();
   await expect(alice.getByRole("button", { name: "Join voice" })).toBeVisible();
 
   // Bob sees Alice gone.
@@ -67,9 +74,9 @@ test("a session survives a page reload", async ({ browser }) => {
   const name = await registerAndSignIn(page, "reload");
   await page.reload();
   // restored from the cookie session — no sign-in form
-  await expect(page.getByRole("button", { name: "Join voice" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Create a community" })).toBeVisible({
     timeout: 15_000,
   });
-  await expect(page.getByText(`Signed in as`)).toContainText(name);
+  await expect(page.getByText("Signed in as")).toContainText(name);
   await ctx.close();
 });

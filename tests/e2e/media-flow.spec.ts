@@ -1,8 +1,7 @@
 /**
- * Proves audio actually transits the SFU — signaling success (participant
- * lists, mute flags) is NOT evidence that media flows, especially behind
- * Docker NAT where ICE candidates can be unreachable while the room "looks"
- * connected.
+ * Proves audio actually transits the SFU in a real community voice channel —
+ * signaling success (participant lists, mute flags) is NOT evidence that
+ * media flows.
  *
  * Client A publishes a continuous 440 Hz tone (fake capture file). Then:
  * 1. Client B's UI must mark A as speaking — that state comes from the
@@ -12,20 +11,27 @@
  */
 import { expect, test } from "@playwright/test";
 
-import { joinVoice, measureRemoteAudio, registerAndSignIn } from "./helpers";
+import {
+  measureRemoteAudio,
+  setUpGuestInVoice,
+  setUpOwnerInVoice,
+  uniqueName,
+} from "./helpers";
 
 test("audio from one client reaches the other through the SFU", async ({ browser }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(90_000);
   const ctxA = await browser.newContext({ permissions: ["microphone"] });
   const ctxB = await browser.newContext({ permissions: ["microphone"] });
   const alice = await ctxA.newPage();
   const bob = await ctxB.newPage();
 
-  const aliceName = await registerAndSignIn(alice, "media-alice");
-  await registerAndSignIn(bob, "media-bob");
-
-  await joinVoice(alice);
-  await joinVoice(bob);
+  const communityName = `Media ${uniqueName("lab")}`;
+  const { username: aliceName, inviteCode } = await setUpOwnerInVoice(
+    alice,
+    "media-alice",
+    communityName,
+  );
+  await setUpGuestInVoice(bob, "media-bob", inviteCode, communityName);
 
   const rowForAlice = bob
     .getByRole("list", { name: "Participants" })

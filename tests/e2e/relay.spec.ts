@@ -1,48 +1,47 @@
 /**
- * TURN relay validation: both clients connect with ?forceRelay=1, which
- * restricts ICE to relay candidates — the call can only succeed if LiveKit's
- * embedded TURN server allocates and relays media. Asserts the same media
- * proofs as media-flow.spec.ts (server VAD + subscriber-side energy).
+ * TURN relay validation over the real product flow: both clients connect with
+ * ?forceRelay=1, which restricts ICE to relay candidates — the call can only
+ * succeed if LiveKit's embedded TURN server allocates and relays media.
  *
  * Gated behind RUN_RELAY=1 (needs LIVEKIT_NODE_IP set to a LAN IP):
  *   RUN_RELAY=1 npx playwright test relay
  */
 import { expect, test } from "@playwright/test";
-import type { Page } from "@playwright/test";
 
-import { E2E_PASSWORD, measureRemoteAudio, uniqueName } from "./helpers";
+import {
+  createCommunity,
+  getInviteCode,
+  joinCommunityWithCode,
+  joinVoice,
+  measureRemoteAudio,
+  openVoiceChannel,
+  registerAndSignIn,
+  uniqueName,
+} from "./helpers";
 
 test.skip(process.env.RUN_RELAY !== "1", "set RUN_RELAY=1 to run TURN relay validation");
 
-async function registerRelayed(page: Page, prefix: string): Promise<string> {
-  const username = uniqueName(prefix);
-  await page.goto("/?forceRelay=1");
-  await page.getByRole("button", { name: "Create an account" }).click();
-  await page.getByLabel("Username").fill(username);
-  await page.getByLabel("Password").fill(E2E_PASSWORD);
-  await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Join voice" })).toBeVisible({
-    timeout: 15_000,
-  });
-  return username;
-}
-
 test("a relay-only call succeeds through TURN with real media", async ({ browser }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(120_000);
   const ctxA = await browser.newContext({ permissions: ["microphone"] });
   const ctxB = await browser.newContext({ permissions: ["microphone"] });
   const alice = await ctxA.newPage();
   const bob = await ctxB.newPage();
 
-  const aliceName = await registerRelayed(alice, "relay-alice");
-  await registerRelayed(bob, "relay-bob");
+  const communityName = `Relay ${uniqueName("net")}`;
 
-  for (const page of [alice, bob]) {
-    await page.getByRole("button", { name: "Join voice" }).click();
-    await expect(page.getByTestId("connection-status")).toHaveText("Connected", {
-      timeout: 30_000,
-    });
-  }
+  await alice.goto("/?forceRelay=1");
+  const aliceName = await registerAndSignIn(alice, "relay-alice");
+  await createCommunity(alice, communityName);
+  const code = await getInviteCode(alice);
+  await openVoiceChannel(alice);
+  await joinVoice(alice);
+
+  await bob.goto("/?forceRelay=1");
+  await registerAndSignIn(bob, "relay-bob");
+  await joinCommunityWithCode(bob, code, communityName);
+  await openVoiceChannel(bob);
+  await joinVoice(bob);
 
   const rowForAlice = bob
     .getByRole("list", { name: "Participants" })

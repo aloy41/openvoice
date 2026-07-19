@@ -40,14 +40,24 @@ export interface VoiceParticipant {
   micMuted: boolean;
 }
 
+export interface VoiceChannelRef {
+  id: string;
+  name: string;
+}
+
 export interface UseVoiceRoom {
   status: VoiceStatus;
   error: VoiceErrorInfo | null;
-  roomName: string | null;
+  /** The channel currently joined (or being joined). */
+  channel: VoiceChannelRef | null;
   participants: VoiceParticipant[];
   muted: boolean;
   deafened: boolean;
-  join: (micDeviceId?: string, outputDeviceId?: string) => Promise<void>;
+  join: (
+    channel: VoiceChannelRef,
+    micDeviceId?: string,
+    outputDeviceId?: string,
+  ) => Promise<void>;
   leave: () => Promise<void>;
   toggleMute: () => Promise<void>;
   toggleDeafen: () => Promise<void>;
@@ -61,7 +71,7 @@ export interface UseVoiceRoom {
 export function useVoiceRoom(): UseVoiceRoom {
   const [status, setStatus] = useState<VoiceStatus>("idle");
   const [error, setError] = useState<VoiceErrorInfo | null>(null);
-  const [roomName, setRoomName] = useState<string | null>(null);
+  const [channel, setChannel] = useState<VoiceChannelRef | null>(null);
   const [participants, setParticipants] = useState<VoiceParticipant[]>([]);
   const [muted, setMuted] = useState(false);
   const [deafened, setDeafenedState] = useState(false);
@@ -121,23 +131,29 @@ export function useVoiceRoom(): UseVoiceRoom {
     if (room) room.removeAllListeners();
     if (audioElsRef.current) audioElsRef.current.replaceChildren();
     setParticipants([]);
-    setRoomName(null);
+    setChannel(null);
   }, []);
 
   const join = useCallback(
-    async (micDeviceId?: string, outputDeviceId?: string) => {
+    async (target: VoiceChannelRef, micDeviceId?: string, outputDeviceId?: string) => {
       if (roomRef.current) return; // already joined/joining
       setError(null);
       setStatus("requesting-token");
+      setChannel(target);
 
       let grant: { token: string; ws_url: string; room: string };
       try {
         // Authenticated by the session cookie; CSRF header added by the
-        // client middleware.
-        const { data, error: apiError } = await api.POST("/api/v1/dev/voice-token");
+        // client middleware. Authorization (membership + CONNECT_VOICE on
+        // this channel) happens server-side.
+        const { data, error: apiError } = await api.POST(
+          "/api/v1/channels/{channel_id}/voice-token",
+          { params: { path: { channel_id: target.id } } },
+        );
         if (apiError || !data) {
           setError(describeTokenError((apiError as { code?: string } | null)?.code));
           setStatus("idle");
+          setChannel(null);
           return;
         }
         grant = data;
@@ -204,7 +220,6 @@ export function useVoiceRoom(): UseVoiceRoom {
         setStatus("idle");
         return;
       }
-      setRoomName(grant.room);
 
       try {
         await room.localParticipant.setMicrophoneEnabled(true);
@@ -321,7 +336,7 @@ export function useVoiceRoom(): UseVoiceRoom {
   return {
     status,
     error,
-    roomName,
+    channel,
     participants,
     muted,
     deafened,
