@@ -532,6 +532,27 @@ export interface paths {
         patch: operations["edit_message_api_v1_messages__message_id__patch"];
         trace?: never;
     };
+    "/api/v1/messages/{message_id}/reactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Toggle Reaction
+         * @description Toggle the caller's reaction (add if absent, remove if present).
+         *     Requires SEND_MESSAGES on the channel.
+         */
+        post: operations["toggle_reaction_api_v1_messages__message_id__reactions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/roles/{role_id}": {
         parameters: {
             query?: never;
@@ -925,6 +946,11 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /**
+             * Reactions
+             * @default []
+             */
+            reactions: components["schemas"]["ReactionOut"][];
             /** Scheme */
             scheme: string;
         };
@@ -983,6 +1009,18 @@ export interface components {
             display_name?: string | null;
             /** Pronouns */
             pronouns?: string | null;
+        };
+        /** ReactionAdd */
+        ReactionAdd: {
+            /** Emoji */
+            emoji: string;
+        };
+        /** ReactionOut */
+        ReactionOut: {
+            /** Emoji */
+            emoji: string;
+            /** User Ids */
+            user_ids: string[];
         };
         /** RegisterRequest */
         RegisterRequest: {
@@ -2311,6 +2349,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    toggle_reaction_api_v1_messages__message_id__reactions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReactionAdd"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReactionOut"][];
                 };
             };
             /** @description Validation Error */

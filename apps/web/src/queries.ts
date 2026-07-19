@@ -131,6 +131,18 @@ export function useEditMessage() {
   });
 }
 
+export function useToggleReaction() {
+  return useMutation({
+    mutationFn: async (args: { messageId: string; emoji: string }) => {
+      const { error } = await api.POST("/api/v1/messages/{message_id}/reactions", {
+        params: { path: { message_id: args.messageId } },
+        body: { emoji: args.emoji },
+      });
+      if (error) throw new Error("Could not react.");
+    },
+  });
+}
+
 export function useDeleteMessage() {
   return useMutation({
     mutationFn: async (messageId: string) => {

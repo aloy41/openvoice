@@ -9,6 +9,7 @@ import { useSession } from "../session";
 import { clockTime, relativeTime } from "../time";
 import { Avatar } from "./Avatar";
 import { ProfileCard } from "./ProfileCard";
+import { Reactions } from "./Reactions";
 import { RichText } from "./RichText";
 
 function MediaEmbeds({ text }: { text: string }) {
@@ -269,6 +270,7 @@ export function TextChannelView({ channel, passphrase, onPassphraseChange }: Tex
                           </p>
                         )}
                         {!shown.locked && <MediaEmbeds text={shown.text} />}
+                        <Reactions messageId={m.id} reactions={m.reactions} />
                       </div>
                       <div className="invisible flex shrink-0 gap-1 group-hover:visible group-focus-within:visible">
                         {m.author_id === user?.id && !shown.locked && (

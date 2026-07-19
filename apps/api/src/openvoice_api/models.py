@@ -280,6 +280,28 @@ class Message(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class MessageReaction(Base):
+    """One emoji reaction by one user on one message (toggle semantics)."""
+
+    __tablename__ = "message_reactions"
+    __table_args__ = (UniqueConstraint("message_id", "user_id", "emoji"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid7)
+    message_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("messages.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    emoji: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
 class Event(Base):
     """Durable, per-community ordered event log. Reconnecting clients replay
     from their last seen seq instead of trusting missed WebSocket frames."""

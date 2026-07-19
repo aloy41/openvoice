@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..authz import load_access, not_found, resolve_channel_capabilities
 from ..deps import authenticate, authenticate_unsafe
 from ..events import append_event, event_envelope_from_row, publish_event
-from ..models import Channel, Event, Message, User
+from ..models import Channel, Event, Message, MessageReaction, User
 from ..permissions import Capability
 from ..rate_limit import check_rate_limit
 
@@ -47,6 +47,17 @@ class MessagePatch(BaseModel):
     scheme: str = Field(default="plaintext", pattern="^(plaintext|passphrase-v1)$")
 
 
+class ReactionOut(BaseModel):
+    emoji: str
+    # user_ids lets every client derive count and its own "did I react"
+    # without a per-recipient server round-trip.
+    user_ids: list[uuid.UUID]
+
+
+class ReactionAdd(BaseModel):
+    emoji: str = Field(min_length=1, max_length=16)
+
+
 class MessageOut(BaseModel):
     id: uuid.UUID
     channel_id: uuid.UUID
@@ -58,6 +69,7 @@ class MessageOut(BaseModel):
     created_at: datetime
     edited_at: datetime | None
     deleted: bool
+    reactions: list[ReactionOut] = []
 
 
 class MessageListOut(BaseModel):
@@ -72,7 +84,12 @@ class EventListOut(BaseModel):
     latest_seq: int
 
 
-def _message_out(message: Message, author_name: str, author_color: str | None) -> MessageOut:
+def _message_out(
+    message: Message,
+    author_name: str,
+    author_color: str | None,
+    reactions: list[ReactionOut] | None = None,
+) -> MessageOut:
     deleted = message.deleted_at is not None
     return MessageOut(
         id=message.id,
@@ -85,7 +102,33 @@ def _message_out(message: Message, author_name: str, author_color: str | None) -
         created_at=message.created_at,
         edited_at=message.edited_at,
         deleted=deleted,
+        reactions=reactions or [],
     )
+
+
+async def _reactions_for(
+    db: AsyncSession, message_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, list[ReactionOut]]:
+    if not message_ids:
+        return {}
+    rows = (
+        (
+            await db.execute(
+                select(MessageReaction)
+                .where(MessageReaction.message_id.in_(message_ids))
+                .order_by(MessageReaction.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    grouped: dict[uuid.UUID, dict[str, list[uuid.UUID]]] = {}
+    for r in rows:
+        grouped.setdefault(r.message_id, {}).setdefault(r.emoji, []).append(r.user_id)
+    return {
+        mid: [ReactionOut(emoji=e, user_ids=uids) for e, uids in emojis.items()]
+        for mid, emojis in grouped.items()
+    }
 
 
 async def _load_text_channel(db: AsyncSession, request: Request, channel_id: uuid.UUID) -> Channel:
@@ -121,9 +164,12 @@ async def list_messages(
         if before is not None:
             query = query.where(Message.id < before)
         rows = (await db.execute(query.order_by(Message.id.desc()).limit(PAGE_SIZE + 1))).all()
-    has_more = len(rows) > PAGE_SIZE
-    rows = rows[:PAGE_SIZE]
-    messages = [_message_out(m, name, color) for m, name, color in reversed(rows)]
+        has_more = len(rows) > PAGE_SIZE
+        rows = rows[:PAGE_SIZE]
+        reactions = await _reactions_for(db, [m.id for m, _n, _c in rows])
+    messages = [
+        _message_out(m, name, color, reactions.get(m.id, [])) for m, name, color in reversed(rows)
+    ]
     return MessageListOut(
         messages=messages,
         next_cursor=rows[-1][0].id if has_more and rows else None,
@@ -252,6 +298,63 @@ async def delete_message(message_id: uuid.UUID, request: Request) -> dict[str, s
         await db.commit()
     await publish_event(request.app.state.redis, envelope)
     return {"status": "deleted"}
+
+
+@router.post("/messages/{message_id}/reactions", response_model=list[ReactionOut])
+async def toggle_reaction(
+    message_id: uuid.UUID, body: ReactionAdd, request: Request
+) -> list[ReactionOut]:
+    """Toggle the caller's reaction (add if absent, remove if present).
+    Requires SEND_MESSAGES on the channel."""
+    ctx = await authenticate_unsafe(request)
+    async with request.app.state.sessionmaker() as db:
+        message = (
+            await db.execute(select(Message).where(Message.id == message_id))
+        ).scalar_one_or_none()
+        if message is None or message.deleted_at is not None:
+            raise not_found()
+        channel = (
+            await db.execute(select(Channel).where(Channel.id == message.channel_id))
+        ).scalar_one()
+        access = await load_access(db, channel.community_id, ctx.user)
+        caps = await resolve_channel_capabilities(db, access, channel)
+        if not caps & Capability.SEND_MESSAGES:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "missing_permission",
+                    "message": "You need the SEND_MESSAGES permission to react here.",
+                    "capability": "SEND_MESSAGES",
+                },
+            )
+        existing = (
+            await db.execute(
+                select(MessageReaction).where(
+                    MessageReaction.message_id == message_id,
+                    MessageReaction.user_id == ctx.user.id,
+                    MessageReaction.emoji == body.emoji,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            await db.delete(existing)
+        else:
+            db.add(MessageReaction(message_id=message_id, user_id=ctx.user.id, emoji=body.emoji))
+        await db.flush()
+        reactions = (await _reactions_for(db, [message_id])).get(message_id, [])
+        envelope = await append_event(
+            db,
+            channel.community_id,
+            "message.reaction_updated",
+            {
+                "message_id": str(message_id),
+                "channel_id": str(channel.id),
+                "reactions": [r.model_dump(mode="json") for r in reactions],
+            },
+        )
+        await db.commit()
+    await publish_event(request.app.state.redis, envelope)
+    return reactions
 
 
 @router.get("/communities/{community_id}/events", response_model=EventListOut)
