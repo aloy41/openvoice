@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from ..authz import load_access, not_found, record_audit
 from ..deps import authenticate, authenticate_unsafe
+from ..events import append_event, publish_event
 from ..models import Channel, Community, Membership, PermissionOverride, Role
 from ..permissions import (
     ALL_CAPABILITIES,
@@ -239,6 +240,37 @@ async def community_presence(community_id: uuid.UUID, request: Request) -> Prese
         except ValueError:
             continue
     return PresenceOut(online=parsed)
+
+
+class CommunityPatch(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+
+
+@router.patch("/communities/{community_id}", response_model=CommunityOut)
+async def update_community(
+    community_id: uuid.UUID, body: CommunityPatch, request: Request
+) -> CommunityOut:
+    ctx = await authenticate_unsafe(request)
+    async with request.app.state.sessionmaker() as db:
+        access = await load_access(db, community_id, ctx.user)
+        access.require(Capability.MANAGE_COMMUNITY)
+        community = access.community
+        old = community.name
+        community.name = body.name
+        record_audit(
+            db,
+            community_id=community_id,
+            actor=ctx.user,
+            action="community.updated",
+            target_type="community",
+            target_id=community_id,
+            meta={"name": {"from": old, "to": body.name}},
+        )
+        envelope = await append_event(db, community_id, "community.updated", {"name": body.name})
+        await db.commit()
+        out = _community_out(community)
+    await publish_event(request.app.state.redis, envelope)
+    return out
 
 
 @router.delete("/communities/{community_id}")

@@ -428,6 +428,21 @@
         "title": "CommunityOut",
         "type": "object"
       },
+      "CommunityPatch": {
+        "properties": {
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CommunityPatch",
+        "type": "object"
+      },
       "DevSessionRequest": {
         "properties": {
           "password": {
@@ -2262,6 +2277,57 @@
           }
         },
         "summary": "Community Detail",
+        "tags": [
+          "communities"
+        ]
+      },
+      "patch": {
+        "operationId": "update_community_api_v1_communities__community_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "community_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Community Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommunityPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunityOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Community",
         "tags": [
           "communities"
         ]

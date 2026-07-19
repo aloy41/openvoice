@@ -32,6 +32,8 @@ export function CommunityApp() {
   // Message passphrase per community, held in memory only (never persisted or
   // sent to the server). Cleared when switching communities.
   const [messagePassphrase, setMessagePassphrase] = useState("");
+  // Channels with messages arrived since you last looked at them.
+  const [unread, setUnread] = useState<Set<string>>(new Set());
   const detail = useCommunityDetail(selectedCommunityId);
 
   // Presence (online user ids) — seeded by a query, updated live by signals.
@@ -102,8 +104,21 @@ export function CommunityApp() {
           void queryClient.invalidateQueries({ queryKey: ["members", event.community_id] });
           void queryClient.invalidateQueries({ queryKey: ["bans", event.community_id] });
         }
+        if (event.type === "community.updated") {
+          void queryClient.invalidateQueries({ queryKey: ["community", event.community_id] });
+          void queryClient.invalidateQueries({ queryKey: ["communities"] });
+        }
         if (event.type === "message.created" || event.type === "message.updated") {
           const message = event.payload.message as MessageInfo;
+          // Mark another channel unread when a new message lands there.
+          if (event.type === "message.created" && message.channel_id !== selectedChannelId) {
+            setUnread((prev) => {
+              if (prev.has(message.channel_id)) return prev;
+              const next = new Set(prev);
+              next.add(message.channel_id);
+              return next;
+            });
+          }
           queryClient.setQueryData<MessageInfo[]>(
             ["messages", message.channel_id],
             (old) => {
@@ -135,7 +150,7 @@ export function CommunityApp() {
           );
         }
       },
-      [queryClient],
+      [queryClient, selectedChannelId],
     ),
     // Kicked or banned: the server cut the stream — leave, refresh the list,
     // and say why honestly.
@@ -219,7 +234,16 @@ export function CommunityApp() {
             detail={detail.data ?? null}
             loading={detail.isLoading}
             selectedChannelId={selectedChannelId}
-            onSelectChannel={setSelectedChannelId}
+            onSelectChannel={(id) => {
+              setSelectedChannelId(id);
+              setUnread((prev) => {
+                if (!prev.has(id)) return prev;
+                const next = new Set(prev);
+                next.delete(id);
+                return next;
+              });
+            }}
+            unread={unread}
             voice={voice}
           />
           <main className="min-w-0 flex-1 overflow-y-auto px-6 py-6">

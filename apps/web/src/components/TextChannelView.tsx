@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
 import { decryptMessage, encryptMessage, MESSAGE_SCHEME } from "../crypto/envelope";
+import { EMOJI } from "../emoji";
 import { extractEmbeds, isOnlyEmbed } from "../media";
 import type { ChannelInfo, MessageInfo } from "../queries";
 import { useDeleteMessage, useEditMessage, useMessages, useSendMessage } from "../queries";
@@ -92,6 +93,7 @@ export function TextChannelView({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [cardUserId, setCardUserId] = useState<string | null>(null);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const endRef = useRef<HTMLDivElement | null>(null);
 
   const canSend = channel.capabilities.includes("SEND_MESSAGES");
@@ -322,10 +324,42 @@ export function TextChannelView({
           {typingNames.length > 2 && "Several people are typing…"}
         </p>
         {canSend ? (
-          <form onSubmit={onSend} className="flex gap-2" aria-label="Send a message">
+          <form onSubmit={onSend} className="relative flex gap-2" aria-label="Send a message">
             <label htmlFor="composer" className="sr-only">
               Message #{channel.name}
             </label>
+            <button
+              type="button"
+              onClick={() => setEmojiOpen((v) => !v)}
+              aria-label="Insert emoji"
+              aria-expanded={emojiOpen}
+              className="rounded-md border border-slate-700 bg-slate-800 px-2 text-lg hover:bg-slate-700"
+            >
+              😊
+            </button>
+            {emojiOpen && (
+              <div
+                role="menu"
+                aria-label="Insert emoji"
+                className="absolute bottom-12 left-0 z-10 flex max-h-48 w-64 flex-wrap gap-1 overflow-y-auto rounded-md border border-slate-700 bg-slate-900 p-2 shadow-lg"
+              >
+                {EMOJI.map((e) => (
+                  <button
+                    key={e}
+                    type="button"
+                    role="menuitem"
+                    aria-label={`Insert ${e}`}
+                    onClick={() => {
+                      setDraft((d) => d + e);
+                      setEmojiOpen(false);
+                    }}
+                    className="rounded p-1 text-lg hover:bg-slate-800"
+                  >
+                    {e}
+                  </button>
+                ))}
+              </div>
+            )}
             <input
               id="composer"
               placeholder={encrypting ? `Encrypted message to #${channel.name}` : `Message #${channel.name}`}

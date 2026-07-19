@@ -136,6 +136,30 @@ async def test_only_owner_deletes_community(app: FastAPI, clean_db: None) -> Non
         assert (await owner.get("/api/v1/communities")).json()["communities"] == []
 
 
+async def test_rename_community(app: FastAPI, clean_db: None) -> None:
+    async with (
+        user_client(app, uname("owner")) as owner,
+        user_client(app, uname("member")) as member,
+    ):
+        detail = await create_community(owner)
+        cid = detail["community"]["id"]
+        code = await make_invite(owner, cid)
+        assert (await member.post("/api/v1/invites/redeem", json={"code": code})).status_code == 200
+
+        # a plain member cannot rename
+        denied = await member.patch(f"/api/v1/communities/{cid}", json={"name": "Nope"})
+        assert denied.status_code == 403
+        assert denied.json()["capability"] == "MANAGE_COMMUNITY"
+
+        # the owner can
+        ok = await owner.patch(f"/api/v1/communities/{cid}", json={"name": "Renamed HQ"})
+        assert ok.status_code == 200
+        assert ok.json()["name"] == "Renamed HQ"
+        assert (await member.get(f"/api/v1/communities/{cid}")).json()["community"][
+            "name"
+        ] == "Renamed HQ"
+
+
 async def test_invalid_channel_parent_rejected(app: FastAPI, clean_db: None) -> None:
     async with user_client(app, uname("owner")) as owner:
         detail = await create_community(owner)
