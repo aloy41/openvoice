@@ -8,10 +8,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Room } from "livekit-client";
 
-import { useCommunities, useCommunityDetail } from "../queries";
+import { useCommunities, useCommunityDetail, usePresence } from "../queries";
 import type { MessageInfo } from "../queries";
 import { useCommunityEvents } from "../realtime";
-import type { CommunityEvent } from "../realtime";
+import type { CommunityEvent, Signal } from "../realtime";
+import { useSession } from "../session";
 import { useVoiceRoom } from "../voice/useVoiceRoom";
 import { ChannelSidebar } from "./ChannelSidebar";
 import { CommunityRail } from "./CommunityRail";
@@ -24,6 +25,7 @@ export function CommunityApp() {
   const voice = useVoiceRoom();
   const communities = useCommunities();
   const queryClient = useQueryClient();
+  const { user } = useSession();
   const [selectedCommunityId, setSelectedCommunityId] = useState<string | null>(null);
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
   const [removedNotice, setRemovedNotice] = useState<string | null>(null);
@@ -32,8 +34,67 @@ export function CommunityApp() {
   const [messagePassphrase, setMessagePassphrase] = useState("");
   const detail = useCommunityDetail(selectedCommunityId);
 
+  // Presence (online user ids) — seeded by a query, updated live by signals.
+  const presenceQuery = usePresence(selectedCommunityId);
+  const [onlineIds, setOnlineIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    // Always count self as online — the presence query can race the WS
+    // marking us online, and we never receive our own presence signal.
+    const base = new Set(presenceQuery.data ?? []);
+    if (user?.id) base.add(user.id);
+    setOnlineIds(base);
+  }, [presenceQuery.data, user?.id]);
+
+  // Typing: per-channel map of userId → { name, at } (expires client-side).
+  const [typing, setTyping] = useState<Record<string, Record<string, { name: string; at: number }>>>(
+    {},
+  );
+  useEffect(() => {
+    const t = setInterval(() => {
+      setTyping((prev) => {
+        const now = Date.now();
+        let changed = false;
+        const next: typeof prev = {};
+        for (const [ch, users] of Object.entries(prev)) {
+          const kept: Record<string, { name: string; at: number }> = {};
+          for (const [uid, info] of Object.entries(users)) {
+            if (now - info.at < 6000) kept[uid] = info;
+            else changed = true;
+          }
+          if (Object.keys(kept).length > 0) next[ch] = kept;
+        }
+        return changed ? next : prev;
+      });
+    }, 2000);
+    return () => clearInterval(t);
+  }, []);
+
+  const onSignal = useCallback(
+    (signal: Signal) => {
+      if (signal.type === "presence") {
+        if (signal.user_id === user?.id) return; // never mark self offline
+        setOnlineIds((prev) => {
+          const next = new Set(prev);
+          if (signal.online) next.add(signal.user_id);
+          else next.delete(signal.user_id);
+          return next;
+        });
+      } else if (signal.type === "typing" && signal.channel_id) {
+        if (signal.user_id === user?.id) return; // ignore self
+        setTyping((prev) => ({
+          ...prev,
+          [signal.channel_id!]: {
+            ...(prev[signal.channel_id!] ?? {}),
+            [signal.user_id]: { name: signal.display_name ?? "Someone", at: Date.now() },
+          },
+        }));
+      }
+    },
+    [user?.id],
+  );
+
   // Live events for the selected community: keep the message caches fresh.
-  useCommunityEvents(
+  const { sendTyping } = useCommunityEvents(
     selectedCommunityId,
     useCallback(
       (event: CommunityEvent) => {
@@ -87,6 +148,7 @@ export function CommunityApp() {
       },
       [queryClient],
     ),
+    onSignal,
   );
 
   const [mics, setMics] = useState<MediaDeviceInfo[]>([]);
@@ -173,6 +235,10 @@ export function CommunityApp() {
                     channel={selectedChannel}
                     passphrase={messagePassphrase}
                     onPassphraseChange={setMessagePassphrase}
+                    typingNames={Object.values(typing[selectedChannel.id] ?? {}).map(
+                      (t) => t.name,
+                    )}
+                    onTyping={() => sendTyping(selectedChannel.id)}
                   />
                 </div>
               )}
@@ -197,7 +263,7 @@ export function CommunityApp() {
               )}
             </div>
           </main>
-          {detail.data && <MembersPanel detail={detail.data} />}
+          {detail.data && <MembersPanel detail={detail.data} onlineIds={onlineIds} />}
         </>
       )}
       {/* Remote audio elements render here, hidden; owned by the voice hook. */}

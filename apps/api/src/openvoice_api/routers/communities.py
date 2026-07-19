@@ -220,6 +220,27 @@ async def community_detail(community_id: uuid.UUID, request: Request) -> Communi
     return await _detail(request, community_id)
 
 
+class PresenceOut(BaseModel):
+    online: list[uuid.UUID]
+
+
+@router.get("/communities/{community_id}/presence", response_model=PresenceOut)
+async def community_presence(community_id: uuid.UUID, request: Request) -> PresenceOut:
+    from ..presence import online_user_ids
+
+    ctx = await authenticate(request)
+    async with request.app.state.sessionmaker() as db:
+        await load_access(db, community_id, ctx.user)
+    ids = await online_user_ids(request.app.state.redis, str(community_id))
+    parsed: list[uuid.UUID] = []
+    for i in ids:
+        try:
+            parsed.append(uuid.UUID(i))
+        except ValueError:
+            continue
+    return PresenceOut(online=parsed)
+
+
 @router.delete("/communities/{community_id}")
 async def delete_community(community_id: uuid.UUID, request: Request) -> dict[str, str]:
     ctx = await authenticate_unsafe(request)

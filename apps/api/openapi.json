@@ -1029,6 +1029,23 @@
         "title": "OverrideSet",
         "type": "object"
       },
+      "PresenceOut": {
+        "properties": {
+          "online": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Online",
+            "type": "array"
+          }
+        },
+        "required": [
+          "online"
+        ],
+        "title": "PresenceOut",
+        "type": "object"
+      },
       "ProfileOut": {
         "properties": {
           "accent_color": {
@@ -2833,6 +2850,49 @@
         "summary": "Assign Role",
         "tags": [
           "roles"
+        ]
+      }
+    },
+    "/api/v1/communities/{community_id}/presence": {
+      "get": {
+        "operationId": "community_presence_api_v1_communities__community_id__presence_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "community_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Community Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresenceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Community Presence",
+        "tags": [
+          "communities"
         ]
       }
     },

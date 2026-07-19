@@ -19,6 +19,22 @@ export function useCommunities() {
   });
 }
 
+export function usePresence(communityId: string | null) {
+  return useQuery({
+    queryKey: ["presence", communityId],
+    enabled: communityId !== null,
+    // Refetched on demand; live updates arrive via the WS presence signal.
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/communities/{community_id}/presence", {
+        params: { path: { community_id: communityId! } },
+      });
+      if (error || !data) throw new Error("failed to load presence");
+      return data.online;
+    },
+  });
+}
+
 export function useCommunityDetail(communityId: string | null) {
   return useQuery({
     queryKey: ["community", communityId],
