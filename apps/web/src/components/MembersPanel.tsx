@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { CommunityDetail } from "../queries";
 import { useBanMember, useBans, useKickMember, useMembers, useUnbanMember } from "../queries";
 import { useSession } from "../session";
+import { Avatar } from "./Avatar";
 
 interface MembersPanelProps {
   detail: CommunityDetail;
@@ -64,6 +65,7 @@ export function MembersPanel({ detail }: MembersPanelProps) {
               className="group rounded-md px-2 py-1.5 text-sm hover:bg-slate-800/60"
             >
               <div className="flex items-center gap-2">
+                <Avatar name={m.display_name} size="sm" />
                 <span className="min-w-0 flex-1 truncate text-slate-200">
                   {m.display_name}
                   {isSelf && <span className="text-slate-400"> (you)</span>}

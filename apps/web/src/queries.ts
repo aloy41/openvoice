@@ -244,6 +244,59 @@ export function useUnbanMember(communityId: string | null) {
   });
 }
 
+export function useCreateChannel(communityId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      name: string;
+      kind: "text" | "voice" | "category";
+      parent_id?: string | null;
+    }) => {
+      const { data, error } = await api.POST("/api/v1/communities/{community_id}/channels", {
+        params: { path: { community_id: communityId! } },
+        body: { name: args.name, kind: args.kind, parent_id: args.parent_id ?? null },
+      });
+      if (error || !data) {
+        const code = (error as { code?: string } | null)?.code;
+        throw new Error(
+          code === "missing_permission"
+            ? "You don't have permission to manage channels here."
+            : "Could not create the channel.",
+        );
+      }
+      return data;
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["community", communityId] }),
+  });
+}
+
+export function useRenameChannel(communityId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { channelId: string; name: string }) => {
+      const { error } = await api.PATCH("/api/v1/channels/{channel_id}", {
+        params: { path: { channel_id: args.channelId } },
+        body: { name: args.name },
+      });
+      if (error) throw new Error("Could not rename the channel.");
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["community", communityId] }),
+  });
+}
+
+export function useDeleteChannel(communityId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (channelId: string) => {
+      const { error } = await api.DELETE("/api/v1/channels/{channel_id}", {
+        params: { path: { channel_id: channelId } },
+      });
+      if (error) throw new Error("Could not delete the channel.");
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["community", communityId] }),
+  });
+}
+
 export function useCreateInvite(communityId: string | null) {
   return useMutation({
     mutationFn: async () => {

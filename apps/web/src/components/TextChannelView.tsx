@@ -5,6 +5,9 @@ import { decryptMessage, encryptMessage, MESSAGE_SCHEME } from "../crypto/envelo
 import type { ChannelInfo, MessageInfo } from "../queries";
 import { useDeleteMessage, useEditMessage, useMessages, useSendMessage } from "../queries";
 import { useSession } from "../session";
+import { clockTime, relativeTime } from "../time";
+import { Avatar } from "./Avatar";
+import { RichText } from "./RichText";
 
 interface TextChannelViewProps {
   channel: ChannelInfo;
@@ -12,8 +15,12 @@ interface TextChannelViewProps {
   onPassphraseChange: (value: string) => void;
 }
 
-function timeOf(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+const GROUP_WINDOW_MS = 5 * 60 * 1000;
+
+function startsGroup(prev: MessageInfo | undefined, m: MessageInfo): boolean {
+  if (!prev) return true;
+  if (prev.author_id !== m.author_id) return true;
+  return new Date(m.created_at).getTime() - new Date(prev.created_at).getTime() > GROUP_WINDOW_MS;
 }
 
 /** Async-decrypt every passphrase-v1 message; plaintext passes through.
@@ -148,83 +155,106 @@ export function TextChannelView({ channel, passphrase, onPassphraseChange }: Tex
         {messages.data?.length === 0 && (
           <p className="text-sm text-slate-400">No messages yet. Say something.</p>
         )}
-        <ol aria-label="Messages" className="space-y-2">
-          {messages.data?.map((m) => {
+        <ol aria-label="Messages" className="space-y-0.5">
+          {messages.data?.map((m, idx) => {
             const shown = display(m);
+            const grouped = !startsGroup(messages.data?.[idx - 1], m);
             return (
-              <li key={m.id} className="group rounded-md px-2 py-1 hover:bg-slate-800/40">
-                {m.deleted ? (
-                  <p className="text-sm italic text-slate-500">message deleted</p>
-                ) : editingId === m.id ? (
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      void onSaveEdit(m);
-                    }}
-                    className="flex gap-2"
-                  >
-                    <label htmlFor={`edit-${m.id}`} className="sr-only">
-                      Edit message
-                    </label>
-                    <input
-                      id={`edit-${m.id}`}
-                      autoFocus
-                      value={editDraft}
-                      onChange={(e) => setEditDraft(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Escape") setEditingId(null);
-                      }}
-                      maxLength={4000}
-                      className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
-                    />
-                    <button type="submit" className="rounded border border-slate-700 px-2 text-xs">
-                      Save
-                    </button>
-                  </form>
-                ) : (
-                  <div className="flex items-baseline gap-2">
-                    <div className="min-w-0 flex-1">
+              <li
+                key={m.id}
+                className={`group flex gap-3 rounded-md px-2 hover:bg-slate-800/40 ${
+                  grouped ? "py-0.5" : "mt-2 py-1"
+                }`}
+              >
+                <div className="w-9 shrink-0 pt-0.5">
+                  {!grouped ? (
+                    <Avatar name={m.author_name} size="md" />
+                  ) : (
+                    <span className="hidden text-right text-[10px] leading-6 text-slate-600 group-hover:block">
+                      {clockTime(m.created_at)}
+                    </span>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  {!grouped && (
+                    <div className="flex items-baseline gap-2">
                       <span className="text-sm font-semibold text-slate-200">{m.author_name}</span>
-                      <span className="ml-2 text-xs text-slate-500">{timeOf(m.created_at)}</span>
+                      <span className="text-xs text-slate-500" title={new Date(m.created_at).toLocaleString()}>
+                        {relativeTime(m.created_at)}
+                      </span>
                       {m.scheme === MESSAGE_SCHEME && !shown.locked && (
-                        <span className="ml-1 text-xs text-emerald-400" title="End-to-end encrypted">
+                        <span className="text-xs text-emerald-400" title="End-to-end encrypted">
                           🔐
                         </span>
                       )}
-                      {m.edited_at && <span className="ml-1 text-xs text-slate-500">(edited)</span>}
+                    </div>
+                  )}
+                  {editingId === m.id ? (
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void onSaveEdit(m);
+                      }}
+                      className="mt-0.5 flex gap-2"
+                    >
+                      <label htmlFor={`edit-${m.id}`} className="sr-only">
+                        Edit message
+                      </label>
+                      <input
+                        id={`edit-${m.id}`}
+                        autoFocus
+                        value={editDraft}
+                        onChange={(e) => setEditDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") setEditingId(null);
+                        }}
+                        maxLength={4000}
+                        className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
+                      />
+                      <button type="submit" className="rounded border border-slate-700 px-2 text-xs">
+                        Save
+                      </button>
+                    </form>
+                  ) : m.deleted ? (
+                    <p className="text-sm italic text-slate-500">message deleted</p>
+                  ) : (
+                    <div className="flex items-start gap-2">
                       <p
-                        className={`whitespace-pre-wrap break-words text-sm ${
+                        className={`min-w-0 flex-1 whitespace-pre-wrap break-words text-sm ${
                           shown.locked ? "italic text-slate-500" : "text-slate-100"
                         }`}
                       >
-                        {shown.text}
+                        {shown.locked ? shown.text : <RichText text={shown.text} />}
+                        {m.edited_at && <span className="ml-1 text-xs text-slate-500">(edited)</span>}
                       </p>
+                      <div className="invisible flex shrink-0 gap-1 group-hover:visible group-focus-within:visible">
+                        {m.author_id === user?.id && !shown.locked && (
+                          <button
+                            onClick={() => {
+                              setEditingId(m.id);
+                              setEditDraft(shown.text);
+                            }}
+                            aria-label={`Edit message: ${shown.text.slice(0, 30)}`}
+                            className="rounded border border-slate-700 px-1.5 py-0.5 text-xs text-slate-300 hover:bg-slate-700"
+                          >
+                            Edit
+                          </button>
+                        )}
+                        {(m.author_id === user?.id || canManage) && (
+                          <button
+                            onClick={() =>
+                              void deleteMessage.mutateAsync(m.id).catch(() => undefined)
+                            }
+                            aria-label={`Delete message from ${m.author_name}`}
+                            className="rounded border border-slate-700 px-1.5 py-0.5 text-xs text-red-300 hover:bg-slate-700"
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div className="invisible flex shrink-0 gap-1 group-hover:visible group-focus-within:visible">
-                      {m.author_id === user?.id && !shown.locked && (
-                        <button
-                          onClick={() => {
-                            setEditingId(m.id);
-                            setEditDraft(shown.text);
-                          }}
-                          aria-label={`Edit message: ${shown.text.slice(0, 30)}`}
-                          className="rounded border border-slate-700 px-1.5 py-0.5 text-xs text-slate-300 hover:bg-slate-700"
-                        >
-                          Edit
-                        </button>
-                      )}
-                      {(m.author_id === user?.id || canManage) && (
-                        <button
-                          onClick={() => void deleteMessage.mutateAsync(m.id).catch(() => undefined)}
-                          aria-label={`Delete message from ${m.author_name}`}
-                          className="rounded border border-slate-700 px-1.5 py-0.5 text-xs text-red-300 hover:bg-slate-700"
-                        >
-                          Delete
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </li>
             );
           })}
