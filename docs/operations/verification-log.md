@@ -45,6 +45,17 @@ New regression e2e (`audio-check.spec.ts`) drives the real meter with a
 440 Hz fake-capture tone and fails if the level stays 0 or the test
 self-stops; both tests pass.
 
+Second root cause, caught by the new "Capturing:" diagnostic on the user's
+machine: a bare `deviceId` constraint is only a preference, and Chrome
+substituted a vendor virtual device ("NGENUITY - HyperX Virtual Audio
+Device", which is silent) for the selected physical mic. Fixed by using
+exact device constraints everywhere (mic test with stale-id fallback,
+in-call `switchActiveDevice(..., exact=true)`, and join-time
+`audioCaptureDefaults`), plus a single AudioContext reused across device
+switches (contexts recreated outside a user gesture can be stuck
+suspended). **Confirmed fixed by the user on real hardware: meter moves and
+self-monitoring is audible.**
+
 **Not yet verified** (open Milestone 1 exit items):
 
 - Full one-hour 4-client soak (run `SOAK_MINUTES=60 npx playwright test soak`
