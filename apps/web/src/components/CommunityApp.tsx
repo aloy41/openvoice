@@ -28,6 +28,9 @@ export function CommunityApp() {
   const [selectedCommunityId, setSelectedCommunityId] = useState<string | null>(null);
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
   const [removedNotice, setRemovedNotice] = useState<string | null>(null);
+  // Message passphrase per community, held in memory only (never persisted or
+  // sent to the server). Cleared when switching communities.
+  const [messagePassphrase, setMessagePassphrase] = useState("");
   const detail = useCommunityDetail(selectedCommunityId);
 
   // Live events for the selected community: keep the message caches fresh.
@@ -113,6 +116,7 @@ export function CommunityApp() {
   const selectCommunity = useCallback((id: string | null) => {
     setSelectedCommunityId(id);
     setSelectedChannelId(null);
+    setMessagePassphrase("");
   }, []);
 
   const selectedChannel =
@@ -159,7 +163,11 @@ export function CommunityApp() {
               )}
               {selectedChannel?.kind === "text" && (
                 <div className="h-[calc(100vh-14rem)] min-h-64">
-                  <TextChannelView channel={selectedChannel} />
+                  <TextChannelView
+                    channel={selectedChannel}
+                    passphrase={messagePassphrase}
+                    onPassphraseChange={setMessagePassphrase}
+                  />
                 </div>
               )}
               {selectedChannel?.kind === "voice" && (

@@ -766,6 +766,11 @@ export interface components {
         MessageCreate: {
             /** Content */
             content: string;
+            /**
+             * Scheme
+             * @default plaintext
+             */
+            scheme: string;
         };
         /** MessageListOut */
         MessageListOut: {
@@ -804,11 +809,18 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Scheme */
+            scheme: string;
         };
         /** MessagePatch */
         MessagePatch: {
             /** Content */
             content: string;
+            /**
+             * Scheme
+             * @default plaintext
+             */
+            scheme: string;
         };
         /** OverrideSet */
         OverrideSet: {

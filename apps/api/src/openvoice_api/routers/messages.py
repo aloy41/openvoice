@@ -29,12 +29,22 @@ router = APIRouter(tags=["messages"])
 PAGE_SIZE = 50
 
 
+# "plaintext": content is the message text (transport-encrypted only).
+# "passphrase-v1": content is an opaque client-produced ciphertext envelope
+# (base64 AES-GCM); the server stores and returns it verbatim and can never
+# read it. New schemes append here; the server treats content as opaque.
+MESSAGE_SCHEMES = ("plaintext", "passphrase-v1")
+CONTENT_MAX = 8000
+
+
 class MessageCreate(BaseModel):
-    content: str = Field(min_length=1, max_length=4000)
+    content: str = Field(min_length=1, max_length=CONTENT_MAX)
+    scheme: str = Field(default="plaintext", pattern="^(plaintext|passphrase-v1)$")
 
 
 class MessagePatch(BaseModel):
-    content: str = Field(min_length=1, max_length=4000)
+    content: str = Field(min_length=1, max_length=CONTENT_MAX)
+    scheme: str = Field(default="plaintext", pattern="^(plaintext|passphrase-v1)$")
 
 
 class MessageOut(BaseModel):
@@ -42,6 +52,7 @@ class MessageOut(BaseModel):
     channel_id: uuid.UUID
     author_id: uuid.UUID
     author_name: str
+    scheme: str
     content: str
     created_at: datetime
     edited_at: datetime | None
@@ -67,6 +78,7 @@ def _message_out(message: Message, author_name: str) -> MessageOut:
         channel_id=message.channel_id,
         author_id=message.author_id,
         author_name=author_name,
+        scheme="plaintext" if deleted else message.scheme,
         content="" if deleted else message.content,
         created_at=message.created_at,
         edited_at=message.edited_at,
@@ -144,7 +156,12 @@ async def send_message(channel_id: uuid.UUID, body: MessageCreate, request: Requ
                     "capability": "SEND_MESSAGES",
                 },
             )
-        message = Message(channel_id=channel_id, author_id=ctx.user.id, content=body.content)
+        message = Message(
+            channel_id=channel_id,
+            author_id=ctx.user.id,
+            content=body.content,
+            scheme=body.scheme,
+        )
         db.add(message)
         await db.flush()
         out = _message_out(message, ctx.user.display_name)
@@ -201,6 +218,7 @@ async def edit_message(message_id: uuid.UUID, body: MessagePatch, request: Reque
             db, request, ctx.user, message_id, need_manage=False
         )
         message.content = body.content
+        message.scheme = body.scheme
         message.edited_at = datetime.now(tz=UTC)
         out = _message_out(message, ctx.user.display_name)
         envelope = await append_event(
