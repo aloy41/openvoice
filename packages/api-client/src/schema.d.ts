@@ -410,6 +410,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/communities/{community_id}/presence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Community Presence */
+        get: operations["community_presence_api_v1_communities__community_id__presence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/communities/{community_id}/roles": {
         parameters: {
             query?: never;
@@ -980,6 +997,11 @@ export interface components {
             role_id?: string | null;
             /** User Id */
             user_id?: string | null;
+        };
+        /** PresenceOut */
+        PresenceOut: {
+            /** Online */
+            online: string[];
         };
         /** ProfileOut */
         ProfileOut: {
@@ -2043,6 +2065,37 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    community_presence_api_v1_communities__community_id__presence_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                community_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresenceOut"];
                 };
             };
             /** @description Validation Error */

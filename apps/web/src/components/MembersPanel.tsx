@@ -8,12 +8,13 @@ import { ProfileCard } from "./ProfileCard";
 
 interface MembersPanelProps {
   detail: CommunityDetail;
+  onlineIds: Set<string>;
 }
 
 /** Right-hand member panel with capability-gated moderation. Destructive
  * actions use an explicit two-step confirm (no window.confirm — keyboard and
  * screen-reader friendly). */
-export function MembersPanel({ detail }: MembersPanelProps) {
+export function MembersPanel({ detail, onlineIds }: MembersPanelProps) {
   const { user } = useSession();
   const communityId = detail.community.id;
   const canKick = detail.my_capabilities.includes("KICK_MEMBERS");
@@ -50,6 +51,11 @@ export function MembersPanel({ detail }: MembersPanelProps) {
     >
       <h3 className="px-1 pb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
         Members — {members.data?.length ?? "…"}
+        {members.data && (
+          <span className="ml-1 text-emerald-400">
+            ({members.data.filter((m) => onlineIds.has(m.user_id)).length} online)
+          </span>
+        )}
       </h3>
       {error && (
         <p role="alert" className="mb-2 px-1 text-xs text-red-400">
@@ -57,8 +63,15 @@ export function MembersPanel({ detail }: MembersPanelProps) {
         </p>
       )}
       <ul className="space-y-1">
-        {members.data?.map((m) => {
+        {[...(members.data ?? [])]
+          .sort(
+            (a, b) =>
+              Number(onlineIds.has(b.user_id)) - Number(onlineIds.has(a.user_id)) ||
+              a.display_name.localeCompare(b.display_name),
+          )
+          .map((m) => {
           const isSelf = m.user_id === user?.id;
+          const online = onlineIds.has(m.user_id);
           const moderatable = !m.is_owner && !isSelf && (canKick || canBan);
           const confirmingThis = confirming?.userId === m.user_id;
           return (
@@ -70,9 +83,15 @@ export function MembersPanel({ detail }: MembersPanelProps) {
                 <button
                   onClick={() => setCardUserId(m.user_id)}
                   aria-label={`View ${m.display_name}'s profile`}
-                  className="rounded-full"
+                  className="relative rounded-full"
                 >
                   <Avatar name={m.display_name} size="sm" color={m.accent_color} />
+                  <span
+                    aria-label={online ? "online" : "offline"}
+                    className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-slate-900 ${
+                      online ? "bg-emerald-400" : "bg-slate-600"
+                    }`}
+                  />
                 </button>
                 <button
                   onClick={() => setCardUserId(m.user_id)}

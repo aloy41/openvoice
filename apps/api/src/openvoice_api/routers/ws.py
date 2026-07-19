@@ -25,6 +25,12 @@ from sqlalchemy import select
 from ..authz import load_access
 from ..events import channel_for, event_envelope_from_row
 from ..models import Event, User, UserSession
+from ..presence import (
+    PRESENCE_TTL_SECONDS,
+    mark_offline,
+    mark_online,
+    publish_ephemeral,
+)
 from ..security import hash_session_secret
 
 log = logging.getLogger("openvoice.ws")
@@ -71,7 +77,10 @@ async def events_ws(websocket: WebSocket) -> None:
     # socket_timeout would silently kill an idle listener after 2 seconds
     # (symptom: live updates stop until the client resubscribes).
     redis = websocket.app.state.redis_pubsub
+    presence_redis = websocket.app.state.redis
     listener: asyncio.Task[None] | None = None
+    heartbeat: asyncio.Task[None] | None = None
+    current_community: str | None = None
 
     async def stop_listener() -> None:
         nonlocal listener
@@ -80,6 +89,27 @@ async def events_ws(websocket: WebSocket) -> None:
             with contextlib.suppress(asyncio.CancelledError):
                 await listener
             listener = None
+
+    async def leave_presence() -> None:
+        nonlocal heartbeat, current_community
+        if heartbeat is not None:
+            heartbeat.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await heartbeat
+            heartbeat = None
+        if current_community is not None:
+            await mark_offline(presence_redis, current_community, str(user.id))
+            await publish_ephemeral(
+                presence_redis,
+                current_community,
+                {"type": "presence", "user_id": str(user.id), "online": False},
+            )
+            current_community = None
+
+    async def run_heartbeat(community_id: str) -> None:
+        while True:
+            await mark_online(presence_redis, community_id, str(user.id))
+            await asyncio.sleep(PRESENCE_TTL_SECONDS / 2)
 
     async def run_listener(community_id: str, min_seq: int) -> None:
         pubsub = redis.pubsub()
@@ -91,6 +121,12 @@ async def events_ws(websocket: WebSocket) -> None:
                 try:
                     envelope = json.loads(item["data"])
                 except (TypeError, ValueError):
+                    continue
+                # Ephemeral signals (typing, presence) bypass the durable log.
+                if envelope.get("ephemeral"):
+                    await websocket.send_json(
+                        {k: v for k, v in envelope.items() if k != "ephemeral"}
+                    )
                     continue
                 # SECURITY: if THIS user's membership ended, stop the stream
                 # immediately — an open socket must not keep leaking events
@@ -118,7 +154,26 @@ async def events_ws(websocket: WebSocket) -> None:
     try:
         while True:
             raw = await websocket.receive_json()
-            if not isinstance(raw, dict) or raw.get("type") != "subscribe":
+            if not isinstance(raw, dict):
+                continue
+            cmd = raw.get("type")
+
+            # Ephemeral typing signal → broadcast to the subscribed community.
+            if cmd == "typing":
+                if current_community and str(raw.get("community_id")) == current_community:
+                    await publish_ephemeral(
+                        presence_redis,
+                        current_community,
+                        {
+                            "type": "typing",
+                            "user_id": str(user.id),
+                            "display_name": user.display_name,
+                            "channel_id": str(raw.get("channel_id") or ""),
+                        },
+                    )
+                continue
+
+            if cmd != "subscribe":
                 await websocket.send_json({"type": "error", "code": "unknown_command"})
                 continue
             try:
@@ -149,6 +204,16 @@ async def events_ws(websocket: WebSocket) -> None:
                 latest = access.community.event_seq
 
             await stop_listener()
+            # Switch presence to the newly-subscribed community.
+            await leave_presence()
+            current_community = str(community_id)
+            await mark_online(presence_redis, current_community, str(user.id))
+            heartbeat = asyncio.create_task(run_heartbeat(current_community))
+            await publish_ephemeral(
+                presence_redis,
+                current_community,
+                {"type": "presence", "user_id": str(user.id), "online": True},
+            )
             # Start live fanout FIRST, then replay: anything published while
             # we replay is either > replayed seqs (delivered live) or dropped
             # by the min_seq filter (already replayed).
@@ -167,3 +232,4 @@ async def events_ws(websocket: WebSocket) -> None:
         log.warning("websocket closed unexpectedly")
     finally:
         await stop_listener()
+        await leave_presence()

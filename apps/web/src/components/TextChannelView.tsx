@@ -37,6 +37,8 @@ interface TextChannelViewProps {
   channel: ChannelInfo;
   passphrase: string;
   onPassphraseChange: (value: string) => void;
+  typingNames: string[];
+  onTyping: () => void;
 }
 
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
@@ -71,7 +73,13 @@ function useDecryptedContent(
   return decrypted;
 }
 
-export function TextChannelView({ channel, passphrase, onPassphraseChange }: TextChannelViewProps) {
+export function TextChannelView({
+  channel,
+  passphrase,
+  onPassphraseChange,
+  typingNames,
+  onTyping,
+}: TextChannelViewProps) {
   const { user } = useSession();
   const messages = useMessages(channel.id);
   const send = useSendMessage(channel.id);
@@ -308,6 +316,11 @@ export function TextChannelView({ channel, passphrase, onPassphraseChange }: Tex
       </div>
 
       <div className="border-t border-slate-800 p-3">
+        <p className="mb-1 h-4 text-xs text-slate-400" aria-live="polite">
+          {typingNames.length === 1 && `${typingNames[0]} is typing…`}
+          {typingNames.length === 2 && `${typingNames[0]} and ${typingNames[1]} are typing…`}
+          {typingNames.length > 2 && "Several people are typing…"}
+        </p>
         {canSend ? (
           <form onSubmit={onSend} className="flex gap-2" aria-label="Send a message">
             <label htmlFor="composer" className="sr-only">
@@ -317,7 +330,10 @@ export function TextChannelView({ channel, passphrase, onPassphraseChange }: Tex
               id="composer"
               placeholder={encrypting ? `Encrypted message to #${channel.name}` : `Message #${channel.name}`}
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={(e) => {
+                setDraft(e.target.value);
+                if (e.target.value) onTyping();
+              }}
               maxLength={4000}
               className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
             />
