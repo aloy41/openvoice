@@ -77,6 +77,16 @@ export function VoiceWorkspace({
           </p>
         </div>
       )}
+      {inRoomHere && !e2eeHere && (
+        <p
+          role="note"
+          aria-label="Call encryption status"
+          className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-400"
+        >
+          Transport encryption only — not end-to-end encrypted. Leave and rejoin with a passphrase
+          (below) to encrypt this call end-to-end.
+        </p>
+      )}
 
       <ConnectionBanner
         status={inThisChannel ? voice.status : "idle"}

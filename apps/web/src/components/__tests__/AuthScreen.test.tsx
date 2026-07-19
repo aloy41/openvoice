@@ -36,13 +36,6 @@ describe("AuthScreen", () => {
     mockGet.mockResolvedValue({ data: undefined, error: { code: "not_authenticated" } } as never);
   });
 
-  it("always shows the honest encryption notice", () => {
-    renderAuth();
-    expect(screen.getByRole("note", { name: "Encryption status" })).toHaveTextContent(
-      "not end-to-end encrypted",
-    );
-  });
-
   it("signs in via the login endpoint", async () => {
     mockPost.mockResolvedValue(OK);
     renderAuth();

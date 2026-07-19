@@ -15,7 +15,6 @@ import type { CommunityEvent } from "../realtime";
 import { useVoiceRoom } from "../voice/useVoiceRoom";
 import { ChannelSidebar } from "./ChannelSidebar";
 import { CommunityRail } from "./CommunityRail";
-import { EncryptionNotice } from "./EncryptionNotice";
 import { HomePane } from "./HomePane";
 import { MembersPanel } from "./MembersPanel";
 import { TextChannelView } from "./TextChannelView";
@@ -155,7 +154,6 @@ export function CommunityApp() {
           />
           <main className="min-w-0 flex-1 overflow-y-auto px-6 py-6">
             <div className="mx-auto max-w-3xl space-y-4">
-              <EncryptionNotice />
               {selectedChannel === null && (
                 <p className="text-sm text-slate-400">
                   Pick a channel from the sidebar.
