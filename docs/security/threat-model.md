@@ -4,12 +4,22 @@ Status: **skeleton** — created at Milestone 0 as required by the master build
 prompt. It must be completed and reviewed before any E2EE claim (Milestone 3
 gate). Sections marked *(M3)* are gates for that milestone.
 
-## Current honest security posture (2026-07-18)
+## Current honest security posture (2026-07-19)
 
-- Voice media: WebRTC transport encryption (DTLS-SRTP) between each client
-  and the LiveKit SFU. **The SFU decrypts and re-routes media. The operator
-  can access voice content. This is not E2EE and is labeled accordingly
-  everywhere.**
+- Voice media, passphrase E2EE (opt-in, ADR-0006): when every participant
+  enters the same client-side passphrase, frames are encrypted in the
+  browser (LiveKit's maintained E2EE worker, PBKDF2-derived key via Web
+  Crypto) before transport — **the SFU, API, database, and operator cannot
+  access the audio**. Verified by an automated test in which a fully
+  authorized client with the wrong passphrase receives every frame and
+  obtains only silence. Honest limits: the passphrase is shared out-of-band;
+  anyone with passphrase + channel access can decrypt; no automatic key
+  rotation on membership change (agree on a new passphrase to exclude a
+  former member from future calls); no per-device identity binding yet.
+  MLS-based dynamic group keying is the planned replacement (A5 below).
+- Voice media, default: WebRTC transport encryption (DTLS-SRTP) between
+  each client and the LiveKit SFU. **Without a passphrase the SFU can
+  access media and the UI says so.**
 - Text messaging: not implemented yet.
 - Authentication: production password accounts (Argon2id, HttpOnly cookie
   sessions with hashed server-side secrets, double-submit CSRF, Redis rate
@@ -63,7 +73,9 @@ gate). Sections marked *(M3)* are gates for that milestone.
 
 | Weakness | Milestone that removes it |
 | --- | --- |
-| SFU/operator can access voice media | M3 (media E2EE) |
+| Voice E2EE requires a manually shared passphrase; no rotation on membership change, no per-device identity | M3 completion (MLS-based group keying) |
+| SFU/operator can access voice media when no passphrase is used | user opt-in today; default-on E2EE with MLS |
+| Text message content readable by the server | M3 (ciphertext envelopes) |
 | Dev login still enabled in dev stacks (shared password, no rate limit); production auth exists but the web client still uses the dev flow | M2 (client migration, then dev-auth removal) |
 | No account recovery — lost password = lost account (no email on file) | M2 later slice |
 | Argon2id parameters are library defaults, not yet reviewed for deployment class | pre-MVP security review |

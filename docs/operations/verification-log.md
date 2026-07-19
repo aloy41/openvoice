@@ -153,6 +153,30 @@ fixed). Web unit tests 17/17, lint/types/build clean.
 - Verified: 80/80 API tests, e2e 9/9 including the new two-sided
   moderation flow, 17/17 unit tests, lint/types/build clean.
 
+### Passphrase E2EE voice — first Milestone 3 slice (2026-07-19, ADR-0006)
+
+Opt-in end-to-end encrypted calls: LiveKit's maintained E2EE worker
+(frame-level AES-GCM, PBKDF2 key derivation via the SDK) keyed by a
+client-entered passphrase that never leaves the browser — the API has no
+code path that receives key material. Honest UI states: green
+"End-to-end encrypted (passphrase)" note with plain-language limits,
+degraded warning when a participant sends unencrypted, per-participant
+🔐/not-encrypted indicators, and unchanged amber state for passphrase-less
+calls and all text messaging.
+
+**Crypto-truth e2e (passed first run, then twice in the full suite):**
+two same-passphrase clients exchange decodable audio (subscriber-side
+energy measured — server-side VAD cannot see through E2EE, so UI speaking
+badges were deliberately NOT used as evidence); a third client with full
+membership and channel authorization but the wrong passphrase receives
+every frame and measures only silence. The SFU holds the same position as
+that client: ciphertext without the key. Suite: e2e 10/10, unit 17/17,
+build clean (E2EE worker bundles as its own chunk).
+
+Remaining for full M3: MLS-based automatic group keying (per-device
+identities, epoch rotation on membership change, verification states) and
+ciphertext message envelopes.
+
 **Not yet verified** (open Milestone 1 exit items):
 - TURN over **TLS** for the most restrictive networks — requires a domain and
   real certificate; part of the hardened production deployment (M4).
