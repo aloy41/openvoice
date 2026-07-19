@@ -20,6 +20,8 @@ export default defineConfig({
   reporter: [["list"]],
   use: {
     baseURL: process.env.E2E_BASE_URL ?? "http://localhost:8080",
+    // The dev stack's LAN HTTPS/WSS endpoints use Caddy's internal CA.
+    ignoreHTTPSErrors: true,
   },
   projects: [
     {

@@ -78,10 +78,15 @@ services:
 
   caddy:
     image: caddy:2-alpine
+    environment:
+      LAN_HOST: ${LIVEKIT_NODE_IP:-127.0.0.1}
     ports:
       - "8080:8080"
+      - "8443:8443"   # HTTPS (internal CA) for LAN devices — mic needs a secure origin
+      - "7443:7443"   # WSS proxy to LiveKit for pages served over HTTPS
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
     depends_on:
       - api
       - web
@@ -89,3 +94,4 @@ services:
 volumes:
   postgres-data:
   web-node-modules:
+  caddy-data:
