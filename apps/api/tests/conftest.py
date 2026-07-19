@@ -68,7 +68,7 @@ async def clean_db() -> AsyncIterator[None]:
     assert TEST_DB_URL is not None
     engine = create_async_engine(TEST_DB_URL)
     async with engine.begin() as conn:
-        await conn.execute(text("TRUNCATE TABLE users"))
+        await conn.execute(text("TRUNCATE TABLE users CASCADE"))
     await engine.dispose()
     yield
 

@@ -22,7 +22,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import Environment, Settings
 from .logging_setup import configure_logging, request_id_var
-from .routers import dev_auth, health, voice
+from .routers import auth, dev_auth, health, voice
+from .security import new_csrf_token
 
 log = logging.getLogger("openvoice.api")
 
@@ -89,6 +90,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         duration_ms = round((time.perf_counter() - start) * 1000, 1)
         response.headers["x-request-id"] = req_id
+        # Double-submit CSRF: every browser ends up with a CSRF cookie it can
+        # echo in the x-csrf-token header (validated in deps.require_csrf).
+        if settings.csrf_cookie_name not in request.cookies:
+            response.set_cookie(
+                settings.csrf_cookie_name,
+                new_csrf_token(),
+                max_age=settings.session_max_age_seconds,
+                httponly=False,
+                samesite="lax",
+                secure=settings.effective_cookie_secure,
+                path="/",
+            )
         log.info(
             "request",
             extra={
@@ -131,6 +144,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     app.include_router(health.router, prefix="/api")
+    app.include_router(auth.router, prefix="/api/v1")
     app.include_router(dev_auth.router, prefix="/api/v1")
     app.include_router(voice.router, prefix="/api/v1")
 

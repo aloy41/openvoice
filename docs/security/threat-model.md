@@ -11,8 +11,10 @@ gate). Sections marked *(M3)* are gates for that milestone.
   can access voice content. This is not E2EE and is labeled accordingly
   everywhere.**
 - Text messaging: not implemented yet.
-- Authentication: development-only shared-password login, refused in
-  production mode at startup.
+- Authentication: production password accounts (Argon2id, HttpOnly cookie
+  sessions with hashed server-side secrets, double-submit CSRF, Redis rate
+  limiting, immediate revocation — ADR-0004) plus the development-only
+  shared-password login, which is refused in production mode at startup.
 - No security review or audit has occurred.
 
 ## Assets
@@ -62,10 +64,11 @@ gate). Sections marked *(M3)* are gates for that milestone.
 | Weakness | Milestone that removes it |
 | --- | --- |
 | SFU/operator can access voice media | M3 (media E2EE) |
-| Shared dev password, no rate limit on dev login | M2 (production auth) |
-| Bearer dev token in browser memory (no cookies/CSRF yet) | M2 |
-| No TURN → join fails on UDP-blocked networks | M1 exit |
-| No rate limiting/quotas anywhere | M2/M4 |
+| Dev login still enabled in dev stacks (shared password, no rate limit); production auth exists but the web client still uses the dev flow | M2 (client migration, then dev-auth removal) |
+| No account recovery — lost password = lost account (no email on file) | M2 later slice |
+| Argon2id parameters are library defaults, not yet reviewed for deployment class | pre-MVP security review |
+| TURN validated over UDP only; TURN over TLS needs domain + certificate | M4 hardened deployment |
+| Rate limiting covers auth endpoints only | M2/M4 |
 | Compose dev stack has no TLS | M4 hardened reference deployment |
 
 ## Standards and implementations to be used (do not substitute)
