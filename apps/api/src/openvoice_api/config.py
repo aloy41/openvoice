@@ -31,6 +31,19 @@ class Settings(BaseSettings):
     dev_auth_password: SecretStr | None = None
     dev_session_max_age_seconds: int = 12 * 60 * 60
 
+    # Production cookie sessions (ADR-0003 successor flow).
+    session_cookie_name: str = "ov_session"
+    csrf_cookie_name: str = "ov_csrf"
+    csrf_header_name: str = "x-csrf-token"
+    session_max_age_seconds: int = 30 * 24 * 60 * 60
+    # None → secure cookies in production, not in dev/test (no TLS locally).
+    cookie_secure: bool | None = None
+
+    # Operator-tunable abuse protection for sign-in/sign-up (never a paid
+    # feature). Counted per client address + username in Redis.
+    auth_rate_limit_attempts: int = 10
+    auth_rate_limit_window_seconds: int = 300
+
     livekit_api_key: str
     livekit_api_secret: SecretStr
     livekit_ws_url: str
@@ -71,3 +84,9 @@ class Settings(BaseSettings):
                 "voice tokens are short-lived by design."
             )
         return self
+
+    @property
+    def effective_cookie_secure(self) -> bool:
+        if self.cookie_secure is not None:
+            return self.cookie_secure
+        return self.environment is Environment.PRODUCTION

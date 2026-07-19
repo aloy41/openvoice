@@ -74,10 +74,30 @@ self-monitoring is audible.**
   relay advertised as 127.0.0.1 — hence `LIVEKIT_NODE_IP` must be a real
   interface IP for relay validation.
 
-**Not yet verified** (open Milestone 1 exit items):
+### Production authentication slice (same day, ADR-0004)
 
-- Full one-hour 4-client soak (run `SOAK_MINUTES=60 npx playwright test soak`
-  on reference hardware; the spec exists and passed at shorter durations).
+12 new API tests, all passing against real PostgreSQL/Redis: Argon2id hash
+storage verified in the database, HttpOnly/SameSite cookie flags asserted,
+CSRF enforcement on every state-changing and anonymous auth endpoint,
+unknown-user vs wrong-password indistinguishability, dev-account password
+login refusal, cross-device session listing and immediate revocation,
+Redis rate limiting (429 after the configured attempts), and voice-token
+issuance via cookie auth with CSRF. Migration 0002 exercised by the test
+session. Full API gate: 35/35 tests, ruff + mypy strict clean.
+
+### Milestone 1 exit: one-hour 4-client soak — PASSED
+
+`SOAK_MINUTES=60 npx playwright test soak` on the hardware above:
+4 fake-media Chromium clients held one continuous call for 60 minutes —
+240/240 liveness + all-see-all participant-count checks at 15 s intervals,
+zero reconnects or drops. (Same-host loopback conditions; a WAN-conditions
+soak belongs to the M4 network-impairment work.)
+
+Operational note recorded: the API dev server hot-reloads code but only
+applies migrations at container start — after pulling schema changes, run
+`docker compose -f docker-compose.dev.yml up -d --force-recreate api`.
+
+**Not yet verified** (open Milestone 1 exit items):
 - TURN over **TLS** for the most restrictive networks — requires a domain and
   real certificate; part of the hardened production deployment (M4).
 - Network impairment (latency/loss/jitter via netem) — needs a Linux test
