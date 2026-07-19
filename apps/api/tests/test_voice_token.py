@@ -82,6 +82,31 @@ async def test_voice_token_ignores_client_supplied_body(
     assert not claims["video"].get("roomAdmin")
 
 
+async def test_ws_url_derives_from_request_origin(clean_db: None) -> None:
+    from openvoice_api.main import create_app
+    from tests.conftest import make_settings
+
+    app = create_app(make_settings(livekit_ws_url="origin"))
+    from httpx import ASGITransport
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        token = await login(c, "originuser")
+        plain = await c.post(
+            "/api/v1/dev/voice-token", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert plain.json()["ws_url"] == "ws://test"
+
+        forwarded = await c.post(
+            "/api/v1/dev/voice-token",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "x-forwarded-proto": "https",
+                "host": "voice.example.com:8443",
+            },
+        )
+        assert forwarded.json()["ws_url"] == "wss://voice.example.com:8443"
+
+
 async def test_two_users_get_distinct_identities(client: AsyncClient, clean_db: None) -> None:
     token_a = await login(client, "alice")
     token_b = await login(client, "bob")

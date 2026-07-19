@@ -17,7 +17,22 @@ from .config import Settings
 from .models import User
 
 
-def mint_voice_token(settings: Settings, user: User) -> dict[str, str | int]:
+def resolve_ws_url(settings: Settings, forwarded_proto: str | None, host: str | None) -> str:
+    """Resolve the LiveKit URL clients should connect to.
+
+    With the "origin" setting, voice signaling shares the page's origin (the
+    reverse proxy routes /rtc* to LiveKit), so one port and one certificate
+    cover everything.
+    """
+    if settings.livekit_ws_url != "origin":
+        return settings.livekit_ws_url
+    scheme = "wss" if forwarded_proto == "https" else "ws"
+    return f"{scheme}://{host or 'localhost'}"
+
+
+def mint_voice_token(
+    settings: Settings, user: User, ws_url: str | None = None
+) -> dict[str, str | int]:
     identity = f"user-{user.id}"
     room = settings.dev_voice_room
     token = (
@@ -38,7 +53,7 @@ def mint_voice_token(settings: Settings, user: User) -> dict[str, str | int]:
     )
     return {
         "token": token,
-        "ws_url": settings.livekit_ws_url,
+        "ws_url": ws_url if ws_url is not None else settings.livekit_ws_url,
         "room": room,
         "identity": identity,
         "expires_in": settings.voice_token_ttl_seconds,

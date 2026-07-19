@@ -46,7 +46,11 @@ class Settings(BaseSettings):
 
     livekit_api_key: str
     livekit_api_secret: SecretStr
-    livekit_ws_url: str
+    # "origin" (recommended): clients connect to LiveKit through the reverse
+    # proxy at the same scheme/host/port the API request arrived on — one
+    # port, one TLS certificate. An explicit ws:// or wss:// URL is for
+    # deployments hosting LiveKit on a separate address.
+    livekit_ws_url: str = "origin"
     dev_voice_room: str = "dev-lobby"
     voice_token_ttl_seconds: int = 300
 
@@ -82,6 +86,13 @@ class Settings(BaseSettings):
             raise ValueError(
                 "OPENVOICE_VOICE_TOKEN_TTL_SECONDS must be between 1 and 600; "
                 "voice tokens are short-lived by design."
+            )
+        if self.livekit_ws_url != "origin" and not self.livekit_ws_url.startswith(
+            ("ws://", "wss://")
+        ):
+            raise ValueError(
+                'OPENVOICE_LIVEKIT_WS_URL must be "origin" (serve LiveKit through the '
+                "reverse proxy on the same origin) or an explicit ws:// / wss:// URL."
             )
         return self
 
