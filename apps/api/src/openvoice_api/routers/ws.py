@@ -92,10 +92,24 @@ async def events_ws(websocket: WebSocket) -> None:
                     envelope = json.loads(item["data"])
                 except (TypeError, ValueError):
                     continue
+                # SECURITY: if THIS user's membership ended, stop the stream
+                # immediately — an open socket must not keep leaking events
+                # (including message contents) to a kicked or banned member.
+                if envelope.get("type") == "membership.removed" and envelope.get("payload", {}).get(
+                    "user_id"
+                ) == str(user.id):
+                    await websocket.send_json(
+                        {
+                            "type": "unsubscribed",
+                            "community_id": community_id,
+                            "code": "membership_removed",
+                        }
+                    )
+                    return
                 # Drop anything already delivered by replay.
                 if int(envelope.get("seq", 0)) <= min_seq:
                     continue
-                await websocket.send_json({"type": "event", **envelope})
+                await websocket.send_json({"type": "event", "event": envelope})
         finally:
             with contextlib.suppress(Exception):
                 await pubsub.unsubscribe()
@@ -144,7 +158,9 @@ async def events_ws(websocket: WebSocket) -> None:
                 {"type": "subscribed", "community_id": str(community_id), "latest_seq": latest}
             )
             for event in replay:
-                await websocket.send_json({"type": "event", **event_envelope_from_row(event)})
+                await websocket.send_json(
+                    {"type": "event", "event": event_envelope_from_row(event)}
+                )
     except WebSocketDisconnect:
         pass
     except Exception:

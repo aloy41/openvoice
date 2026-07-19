@@ -20,9 +20,12 @@ export interface CommunityEvent {
 export function useCommunityEvents(
   communityId: string | null,
   onEvent: (event: CommunityEvent) => void,
+  onRemoved?: (communityId: string) => void,
 ): void {
   const handlerRef = useRef(onEvent);
   handlerRef.current = onEvent;
+  const removedRef = useRef(onRemoved);
+  removedRef.current = onRemoved;
 
   useEffect(() => {
     if (communityId === null) return;
@@ -42,17 +45,22 @@ export function useCommunityEvents(
         );
       };
       ws.onmessage = (raw) => {
-        let msg: { type?: string; seq?: number } & CommunityEvent;
+        let msg: { type?: string; event?: CommunityEvent; code?: string; community_id?: string };
         try {
           msg = JSON.parse(String(raw.data));
         } catch {
           return;
         }
-        if (msg.type === "event" || (msg.seq !== undefined && msg.community_id)) {
-          const event = msg as CommunityEvent;
+        if (msg.type === "event" && msg.event) {
+          const event = msg.event;
           if (event.seq <= lastSeq) return; // replay overlap — already seen
           lastSeq = event.seq;
           handlerRef.current(event);
+        } else if (msg.type === "unsubscribed" && msg.code === "membership_removed") {
+          // This user was kicked or banned: the server cut the stream.
+          closed = true;
+          ws?.close();
+          removedRef.current?.(msg.community_id ?? communityId);
         }
       };
       ws.onclose = () => {

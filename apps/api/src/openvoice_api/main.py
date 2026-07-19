@@ -43,7 +43,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings if settings is not None else Settings()  # type: ignore[call-arg]
     configure_logging(settings.log_level)
 
-    engine = create_async_engine(settings.database_url, pool_pre_ping=True)
+    engine_kwargs: dict[str, object] = {"pool_pre_ping": True}
+    if settings.environment is Environment.TEST:
+        # Tests drive one app from multiple event loops (e.g. two TestClient
+        # portals); pooled asyncpg connections must not cross loops.
+        from sqlalchemy.pool import NullPool
+
+        engine_kwargs = {"poolclass": NullPool}
+    engine = create_async_engine(settings.database_url, **engine_kwargs)
     sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
     redis_client: aioredis.Redis = aioredis.from_url(  # type: ignore[no-untyped-call]
         settings.redis_url, socket_connect_timeout=2, socket_timeout=2

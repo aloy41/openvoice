@@ -138,6 +138,82 @@ export function useDeleteMessage() {
   });
 }
 
+export type MemberInfo = components["schemas"]["MemberOut"];
+export type BanInfo = components["schemas"]["BanOut"];
+
+export function useMembers(communityId: string | null) {
+  return useQuery({
+    queryKey: ["members", communityId],
+    enabled: communityId !== null,
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/communities/{community_id}/members", {
+        params: { path: { community_id: communityId! } },
+      });
+      if (error || !data) throw new Error("failed to load members");
+      return data.members;
+    },
+  });
+}
+
+export function useBans(communityId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ["bans", communityId],
+    enabled: communityId !== null && enabled,
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/communities/{community_id}/bans", {
+        params: { path: { community_id: communityId! } },
+      });
+      if (error || !data) throw new Error("failed to load bans");
+      return data.bans;
+    },
+  });
+}
+
+export function useKickMember(communityId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      const { error } = await api.DELETE(
+        "/api/v1/communities/{community_id}/members/{user_id}",
+        { params: { path: { community_id: communityId!, user_id: userId } } },
+      );
+      if (error) throw new Error("Could not kick that member.");
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["members", communityId] }),
+  });
+}
+
+export function useBanMember(communityId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      const { error } = await api.POST("/api/v1/communities/{community_id}/bans", {
+        params: { path: { community_id: communityId! } },
+        body: { user_id: userId },
+      });
+      if (error) throw new Error("Could not ban that member.");
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["members", communityId] });
+      void qc.invalidateQueries({ queryKey: ["bans", communityId] });
+    },
+  });
+}
+
+export function useUnbanMember(communityId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      const { error } = await api.DELETE(
+        "/api/v1/communities/{community_id}/bans/{user_id}",
+        { params: { path: { community_id: communityId!, user_id: userId } } },
+      );
+      if (error) throw new Error("Could not lift that ban.");
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["bans", communityId] }),
+  });
+}
+
 export function useCreateInvite(communityId: string | null) {
   return useMutation({
     mutationFn: async () => {

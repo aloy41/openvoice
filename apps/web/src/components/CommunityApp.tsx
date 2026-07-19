@@ -17,6 +17,7 @@ import { ChannelSidebar } from "./ChannelSidebar";
 import { CommunityRail } from "./CommunityRail";
 import { EncryptionNotice } from "./EncryptionNotice";
 import { HomePane } from "./HomePane";
+import { MembersPanel } from "./MembersPanel";
 import { TextChannelView } from "./TextChannelView";
 import { VoiceWorkspace } from "./VoiceWorkspace";
 
@@ -26,6 +27,7 @@ export function CommunityApp() {
   const queryClient = useQueryClient();
   const [selectedCommunityId, setSelectedCommunityId] = useState<string | null>(null);
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
+  const [removedNotice, setRemovedNotice] = useState<string | null>(null);
   const detail = useCommunityDetail(selectedCommunityId);
 
   // Live events for the selected community: keep the message caches fresh.
@@ -33,6 +35,10 @@ export function CommunityApp() {
     selectedCommunityId,
     useCallback(
       (event: CommunityEvent) => {
+        if (event.type.startsWith("membership.")) {
+          void queryClient.invalidateQueries({ queryKey: ["members", event.community_id] });
+          void queryClient.invalidateQueries({ queryKey: ["bans", event.community_id] });
+        }
         if (event.type === "message.created" || event.type === "message.updated") {
           const message = event.payload.message as MessageInfo;
           queryClient.setQueryData<MessageInfo[]>(
@@ -57,6 +63,17 @@ export function CommunityApp() {
             ),
           );
         }
+      },
+      [queryClient],
+    ),
+    // Kicked or banned: the server cut the stream — leave, refresh the list,
+    // and say why honestly.
+    useCallback(
+      (communityId: string) => {
+        setSelectedCommunityId((cur) => (cur === communityId ? null : cur));
+        setSelectedChannelId(null);
+        setRemovedNotice("You were removed from that community.");
+        void queryClient.invalidateQueries({ queryKey: ["communities"] });
       },
       [queryClient],
     ),
@@ -110,6 +127,14 @@ export function CommunityApp() {
       />
       {selectedCommunityId === null ? (
         <main className="min-w-0 flex-1 overflow-y-auto px-6 py-8">
+          {removedNotice && (
+            <p
+              role="alert"
+              className="mx-auto mb-4 max-w-md rounded-md border border-amber-600/40 bg-amber-950/40 px-3 py-2 text-sm text-amber-200"
+            >
+              {removedNotice}
+            </p>
+          )}
           <HomePane
             onCreated={(id) => selectCommunity(id)}
             onJoined={(id) => selectCommunity(id)}
@@ -158,6 +183,7 @@ export function CommunityApp() {
               )}
             </div>
           </main>
+          {detail.data && <MembersPanel detail={detail.data} />}
         </>
       )}
       {/* Remote audio elements render here, hidden; owned by the voice hook. */}

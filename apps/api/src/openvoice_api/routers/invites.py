@@ -18,6 +18,7 @@ from sqlalchemy import select
 
 from ..authz import load_access, record_audit
 from ..deps import authenticate_unsafe
+from ..events import append_event, publish_event
 from ..models import Ban, Community, Invite, Membership
 from ..permissions import Capability
 from ..rate_limit import check_rate_limit
@@ -156,6 +157,7 @@ async def redeem_invite(body: InviteRedeem, request: Request) -> InviteRedeemed:
                 )
             )
         ).scalar_one_or_none()
+        envelope = None
         if existing is None:
             invite.uses += 1
             db.add(Membership(community_id=invite.community_id, user_id=ctx.user.id))
@@ -168,5 +170,13 @@ async def redeem_invite(body: InviteRedeem, request: Request) -> InviteRedeemed:
                 target_id=ctx.user.id,
                 meta={"invite_id": str(invite.id)},
             )
+            envelope = await append_event(
+                db,
+                invite.community_id,
+                "membership.joined",
+                {"user_id": str(ctx.user.id), "display_name": ctx.user.display_name},
+            )
             await db.commit()
+    if envelope is not None:
+        await publish_event(request.app.state.redis, envelope)
     return InviteRedeemed(community_id=community.id, community_name=community.name)
