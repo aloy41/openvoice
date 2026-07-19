@@ -1,14 +1,20 @@
 /**
  * Automated accessibility checks (axe-core) for every screen of the current
- * slice: auth, pre-join, and in-call. WCAG 2.1 A/AA rulesets. These are a
- * floor, not a ceiling — manual keyboard/screen-reader passes are still part
- * of the release checklist.
+ * slice: auth, home, community workspace (pre-join), and in-call. WCAG 2.1
+ * A/AA rulesets. These are a floor, not a ceiling — manual keyboard and
+ * screen-reader passes are still part of the release checklist.
  */
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
-import { joinVoice, registerAndSignIn } from "./helpers";
+import {
+  createCommunity,
+  joinVoice,
+  openVoiceChannel,
+  registerAndSignIn,
+  uniqueName,
+} from "./helpers";
 
 async function expectNoViolations(page: Page, screen: string) {
   const results = await new AxeBuilder({ page })
@@ -31,11 +37,18 @@ test("auth screen (sign in and create account) has no axe violations", async ({ 
   await expectNoViolations(page, "create-account");
 });
 
-test("pre-join and in-call screens have no axe violations", async ({ browser }) => {
+test("home, community workspace, and in-call screens have no axe violations", async ({
+  browser,
+}) => {
+  test.setTimeout(60_000);
   const ctx = await browser.newContext({ permissions: ["microphone"] });
   const page = await ctx.newPage();
   await registerAndSignIn(page, "a11y");
-  await expectNoViolations(page, "pre-join");
+  await expectNoViolations(page, "home");
+
+  await createCommunity(page, `A11y ${uniqueName("hall")}`);
+  await openVoiceChannel(page);
+  await expectNoViolations(page, "workspace-pre-join");
 
   await joinVoice(page);
   await expect(page.getByRole("list", { name: "Participants" })).toBeVisible();

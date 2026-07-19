@@ -1,13 +1,21 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
 import { AuthScreen } from "./components/AuthScreen";
-import { VoiceScreen } from "./components/VoiceScreen";
+import { CommunityApp } from "./components/CommunityApp";
 import { SessionProvider, useSession } from "./session";
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: 1, staleTime: 15_000 },
+  },
+});
 
 function Shell() {
   const { status, user, signOut } = useSession();
   return (
-    <div className="min-h-full bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 px-6 py-3">
-        <div className="mx-auto flex max-w-3xl items-center justify-between">
+    <div className="flex h-screen flex-col bg-slate-950 text-slate-100">
+      <header className="shrink-0 border-b border-slate-800 px-6 py-3">
+        <div className="flex items-center justify-between">
           <h1 className="text-lg font-semibold tracking-tight">Openvoice</h1>
           {user && (
             <div className="flex items-center gap-3 text-sm">
@@ -24,23 +32,29 @@ function Shell() {
           )}
         </div>
       </header>
-      <main className="mx-auto max-w-3xl px-6 py-8">
+      <div className="min-h-0 flex-1">
         {status === "loading" && (
-          <p role="status" className="text-sm text-slate-400">
+          <p role="status" className="px-6 py-8 text-sm text-slate-400">
             Loading…
           </p>
         )}
-        {status === "signed-out" && <AuthScreen />}
-        {status === "signed-in" && <VoiceScreen />}
-      </main>
+        {status === "signed-out" && (
+          <main className="overflow-y-auto px-6 py-8">
+            <AuthScreen />
+          </main>
+        )}
+        {status === "signed-in" && <CommunityApp />}
+      </div>
     </div>
   );
 }
 
 export function App() {
   return (
-    <SessionProvider>
-      <Shell />
-    </SessionProvider>
+    <QueryClientProvider client={queryClient}>
+      <SessionProvider>
+        <Shell />
+      </SessionProvider>
+    </QueryClientProvider>
   );
 }

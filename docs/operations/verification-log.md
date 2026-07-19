@@ -121,6 +121,19 @@ Migration 0003 exercised by the test session and applied to the dev
 database. Web e2e suite unaffected (7/7). The community UI is the next
 slice; until then these endpoints are API-only.
 
+### Community web UI (same day)
+
+Three-pane workspace (community rail / channel sidebar / content pane) with
+TanStack Query for server state. Create community, invite creation with
+copyable code, invite redemption, per-channel voice via the authorized
+`/channels/{id}/voice-token` endpoint (the dev room is no longer used by the
+UI), a persistent voice status bar, and an honest placeholder for text
+channels. Every e2e spec now exercises the REAL product flow (register →
+create community → invite → guest joins → authorized voice channel):
+7/7 passed twice consecutively, including axe accessibility on auth, home,
+workspace, and in-call screens (one new contrast violation caught and
+fixed). Web unit tests 17/17, lint/types/build clean.
+
 **Not yet verified** (open Milestone 1 exit items):
 - TURN over **TLS** for the most restrictive networks — requires a domain and
   real certificate; part of the hardened production deployment (M4).
