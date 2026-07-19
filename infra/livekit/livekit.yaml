@@ -6,9 +6,22 @@ rtc:
   tcp_port: 7881
   port_range_start: 50000
   port_range_end: 50100
-  # Development on localhost only; a real deployment must advertise its
-  # external IP (see LiveKit self-hosting docs) and add TURN.
   use_external_ip: false
+  # The advertised node IP is passed via --node-ip in docker-compose
+  # (LIVEKIT_NODE_IP in .env). Default 127.0.0.1 works for same-machine
+  # calls; set it to the machine's LAN IP to validate TURN relay
+  # (Chromium and the SFU cannot complete ICE through a loopback relay).
+turn:
+  enabled: true
+  # Plain TURN/UDP for development relay validation (?forceRelay=1 client
+  # flag + RUN_RELAY=1 e2e). Production restrictive-network support requires
+  # TURN over TLS: set domain, cert_file/key_file and tls_port 5349 with a
+  # real certificate — TLS TURN cannot be validated on localhost.
+  udp_port: 3478
+  # Kept small so the compose file can publish the relay range (the SFU must
+  # reach relayed candidates through the host's published ports).
+  relay_range_start: 30000
+  relay_range_end: 30100
 room:
   auto_create: true
   empty_timeout: 300

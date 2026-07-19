@@ -35,6 +35,9 @@ export default defineConfig({
             // silent in headless shell): loop a generated 440 Hz tone.
             `--use-file-for-fake-audio-capture=${resolve(process.cwd(), "tests/e2e/fixtures/tone.wav")}`,
             "--autoplay-policy=no-user-gesture-required",
+            // Chromium ignores loopback TURN/ICE by default; the dev stack's
+            // TURN server is advertised as 127.0.0.1 (relay.spec.ts).
+            "--allow-loopback-in-peer-connection",
           ],
         },
       },

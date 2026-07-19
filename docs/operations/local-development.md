@@ -14,7 +14,7 @@ Services and ports:
 | caddy | front door (web + `/api/*`) | 8080 |
 | web | Vite dev server (behind caddy) | — |
 | api | FastAPI (behind caddy at `/api`) | — |
-| livekit | SFU WebSocket + WebRTC | 7880 (ws), 7881/tcp, 50000–50100/udp |
+| livekit | SFU WebSocket + WebRTC | 7880 (ws), 7881/tcp, 3478/udp (TURN), 30000–30100/udp (TURN relay), 50000–50100/udp (media) |
 | postgres | database | — (compose-internal) |
 | redis | ephemeral state | — (compose-internal) |
 
@@ -59,7 +59,14 @@ npm run generate -w packages/api-client
   missing `OPENVOICE_DEV_AUTH_PASSWORD`.
 - **Voice join fails but login works** — check the browser can reach
   `ws://localhost:7880` and that UDP 50000–50100 isn't blocked by a local
-  firewall. There is no TURN fallback yet.
+  firewall. WebRTC-over-TCP (7881) and TURN/UDP (3478) provide fallbacks.
+- **TURN relay validation** — set `LIVEKIT_NODE_IP` in `.env` to your
+  machine's LAN IP (ICE cannot complete through a loopback relay), restart
+  the livekit service, then run `RUN_RELAY=1 npx playwright test relay`.
+  Clients can force relay-only ICE with the `?forceRelay=1` URL flag.
+  Production restrictive-network support additionally needs TURN over TLS
+  (domain + certificate) — not testable on localhost; see
+  `infra/livekit/livekit.yaml`.
 - **Microphone errors** — the client distinguishes permission-denied,
   no-device, and device-in-use states; on Windows check the OS microphone
   privacy settings.

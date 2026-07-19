@@ -56,11 +56,30 @@ switches (contexts recreated outside a user gesture can be stuck
 suspended). **Confirmed fixed by the user on real hardware: meter moves and
 self-monitoring is audible.**
 
+### Media-path and TURN validation (same day, second session)
+
+- **SFU media transit proven** (`media-flow.spec.ts`, runs in every e2e
+  pass): client A publishes a 440 Hz tone; client B's UI must mark A as
+  speaking (server-side voice-activity detection ⇒ A→SFU audio) and the
+  remote stream at B must carry measurable energy (⇒ SFU→B audio). Passed
+  repeatedly. Signaling success alone is now never mistaken for media flow.
+- **TURN relay validated** (`relay.spec.ts`, gated `RUN_RELAY=1`): embedded
+  LiveKit TURN/UDP (3478, relay range 30000–30100 published) with the node
+  advertising the machine's LAN IP; both clients forced to relay-only ICE
+  (`?forceRelay=1` ⇒ `iceTransportPolicy: relay`) completed a call with the
+  same media proofs. Diagnostics confirmed a `typ relay` candidate and ICE
+  `connected`. Two findings recorded for future operators: Chromium ignores
+  loopback TURN servers (dev harness passes
+  `--allow-loopback-in-peer-connection`), and ICE cannot complete through a
+  relay advertised as 127.0.0.1 — hence `LIVEKIT_NODE_IP` must be a real
+  interface IP for relay validation.
+
 **Not yet verified** (open Milestone 1 exit items):
 
 - Full one-hour 4-client soak (run `SOAK_MINUTES=60 npx playwright test soak`
   on reference hardware; the spec exists and passed at shorter durations).
-- TURN / restrictive-network fallback — no TURN server deployed yet.
+- TURN over **TLS** for the most restrictive networks — requires a domain and
+  real certificate; part of the hardened production deployment (M4).
 - Network impairment (latency/loss/jitter via netem) — needs a Linux test
   environment.
 - CI pipeline has not executed on GitHub (nothing pushed yet); it is linted

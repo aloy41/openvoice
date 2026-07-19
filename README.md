@@ -135,9 +135,10 @@ CI fails if the committed schema or generated client drifts from the code.
   permissions, invites, or text messaging yet.
 - No rate limiting on the development login endpoint (it is dev-only and must
   never be exposed publicly).
-- No TURN server yet; clients on networks that block UDP to the SFU may fail
-  to connect. TURN is part of the Milestone 1 exit criteria and will be added
-  before that milestone closes.
+- TURN/UDP is enabled in the dev stack and validated by a relay-only e2e
+  test; WebRTC-over-TCP (port 7881) is also available. TURN over **TLS**
+  (needed for the most restrictive networks) requires a domain and real
+  certificate and therefore ships with the production deployment milestone.
 - Windows/macOS Docker Desktop note: LiveKit's UDP port range is published
   through the Docker NAT; for development on `localhost` this is fine, but do
   not treat this compose file as a production deployment.
