@@ -1,4 +1,5 @@
 import type { VoiceParticipant } from "../voice/useVoiceRoom";
+import { Avatar } from "./Avatar";
 
 export interface ParticipantListProps {
   participants: VoiceParticipant[];
@@ -22,12 +23,7 @@ export function ParticipantList({
           key={p.identity}
           className="flex items-center gap-3 rounded-md border border-slate-800 bg-slate-900 px-3 py-2"
         >
-          <span
-            aria-hidden
-            className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-              p.speaking ? "bg-emerald-400 motion-safe:animate-pulse" : "bg-slate-600"
-            }`}
-          />
+          <Avatar name={p.name} size="sm" speaking={p.speaking} />
           <span className="min-w-0 flex-1 truncate text-sm">
             {p.name}
             {p.isLocal && <span className="text-slate-400"> (you)</span>}
