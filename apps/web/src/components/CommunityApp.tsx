@@ -50,7 +50,8 @@ export function CommunityApp() {
               const existing = old.findIndex((m) => m.id === message.id);
               if (existing >= 0) {
                 const next = [...old];
-                next[existing] = message;
+                // Preserve reactions — edit events don't carry them.
+                next[existing] = { ...message, reactions: old[existing]!.reactions };
                 return next;
               }
               return [...old, message];
@@ -63,6 +64,13 @@ export function CommunityApp() {
             old?.map((m) =>
               m.id === messageId ? { ...m, deleted: true, content: "" } : m,
             ),
+          );
+        } else if (event.type === "message.reaction_updated") {
+          const channelId = event.payload.channel_id as string;
+          const messageId = event.payload.message_id as string;
+          const reactions = event.payload.reactions as MessageInfo["reactions"];
+          queryClient.setQueryData<MessageInfo[]>(["messages", channelId], (old) =>
+            old?.map((m) => (m.id === messageId ? { ...m, reactions } : m)),
           );
         }
       },

@@ -936,6 +936,14 @@
             "title": "Id",
             "type": "string"
           },
+          "reactions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ReactionOut"
+            },
+            "title": "Reactions",
+            "type": "array"
+          },
           "scheme": {
             "title": "Scheme",
             "type": "string"
@@ -1134,6 +1142,43 @@
           }
         },
         "title": "ProfilePatch",
+        "type": "object"
+      },
+      "ReactionAdd": {
+        "properties": {
+          "emoji": {
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "Emoji",
+            "type": "string"
+          }
+        },
+        "required": [
+          "emoji"
+        ],
+        "title": "ReactionAdd",
+        "type": "object"
+      },
+      "ReactionOut": {
+        "properties": {
+          "emoji": {
+            "title": "Emoji",
+            "type": "string"
+          },
+          "user_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "User Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "emoji",
+          "user_ids"
+        ],
+        "title": "ReactionOut",
         "type": "object"
       },
       "RegisterRequest": {
@@ -3188,6 +3233,64 @@
           }
         },
         "summary": "Edit Message",
+        "tags": [
+          "messages"
+        ]
+      }
+    },
+    "/api/v1/messages/{message_id}/reactions": {
+      "post": {
+        "description": "Toggle the caller's reaction (add if absent, remove if present).\nRequires SEND_MESSAGES on the channel.",
+        "operationId": "toggle_reaction_api_v1_messages__message_id__reactions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Message Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReactionAdd"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ReactionOut"
+                  },
+                  "title": "Response Toggle Reaction Api V1 Messages  Message Id  Reactions Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Toggle Reaction",
         "tags": [
           "messages"
         ]
