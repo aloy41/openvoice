@@ -1,0 +1,64 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openvoice-api"
+version = "0.1.0"
+description = "Openvoice control plane (FastAPI)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.30,<1",
+    "pydantic>=2.8,<3",
+    "pydantic-settings>=2.4,<3",
+    "sqlalchemy[asyncio]>=2.0.30,<2.1",
+    "asyncpg>=0.29,<1",
+    "alembic>=1.13,<2",
+    "redis>=5.0,<7",
+    "itsdangerous>=2.2,<3",
+    "livekit-api>=0.8,<2",
+    "uuid6>=2024.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2,<9",
+    "pytest-asyncio>=0.24,<2",
+    "httpx>=0.27,<1",
+    "pyjwt>=2.9,<3",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openvoice_api"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "S", "T20", "RUF"]
+ignore = [
+    "S101", # assert is fine in tests; src has no asserts doing validation
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S105", "S106", "S603", "S607"] # hardcoded fake test credentials / subprocess alembic
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "src"
+packages = ["openvoice_api"]
+
+[[tool.mypy.overrides]]
+module = ["livekit.*", "uuid6.*"]
+ignore_missing_imports = true

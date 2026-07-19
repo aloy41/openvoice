@@ -1,0 +1,89 @@
+# Openvoice development stack. NOT a production deployment (no TLS, dev auth,
+# published database-free ports only). See docs/operations/local-development.md
+name: openvoice-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: openvoice
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      POSTGRES_DB: openvoice
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openvoice -d openvoice"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  livekit:
+    image: livekit/livekit-server:v1.9.11
+    command: --config /etc/livekit.yaml
+    environment:
+      # Key/secret pair shared with the API for token signing. Values come
+      # from .env (dev-only placeholders; never commit real secrets).
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:?set in .env}: ${LIVEKIT_API_SECRET:?set in .env}"
+    volumes:
+      - ./infra/livekit/livekit.yaml:/etc/livekit.yaml:ro
+    ports:
+      - "7880:7880"                 # WebSocket signaling
+      - "7881:7881"                 # WebRTC over TCP fallback
+      - "50000-50100:50000-50100/udp"  # WebRTC media
+
+  api:
+    build:
+      context: apps/api
+    environment:
+      OPENVOICE_ENVIRONMENT: ${OPENVOICE_ENVIRONMENT:-development}
+      OPENVOICE_SECRET_KEY: ${OPENVOICE_SECRET_KEY:?set in .env}
+      OPENVOICE_DATABASE_URL: postgresql+asyncpg://openvoice:${POSTGRES_PASSWORD}@postgres:5432/openvoice
+      OPENVOICE_TEST_DATABASE_URL: postgresql+asyncpg://openvoice:${POSTGRES_PASSWORD}@postgres:5432/openvoice_test
+      OPENVOICE_REDIS_URL: redis://redis:6379/0
+      OPENVOICE_DEV_AUTH_ENABLED: ${OPENVOICE_DEV_AUTH_ENABLED:-true}
+      OPENVOICE_DEV_AUTH_PASSWORD: ${OPENVOICE_DEV_AUTH_PASSWORD:-}
+      OPENVOICE_LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      OPENVOICE_LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      OPENVOICE_LIVEKIT_WS_URL: ${OPENVOICE_LIVEKIT_WS_URL:-ws://localhost:7880}
+      WATCHFILES_FORCE_POLLING: "true"
+    command: sh -c "alembic upgrade head && uvicorn openvoice_api.asgi:app --host 0.0.0.0 --port 8000 --reload"
+    volumes:
+      - ./apps/api:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    image: node:22-alpine
+    working_dir: /repo
+    command: sh -c "npm install && npm run dev -w apps/web -- --host 0.0.0.0"
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      - .:/repo
+      - web-node-modules:/repo/node_modules
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - api
+      - web
+
+volumes:
+  postgres-data:
+  web-node-modules:

@@ -1,0 +1,17 @@
+# Development front door. Production guidance (TLS, headers, rate limits)
+# arrives with the Milestone 4 hardened reference deployment.
+{
+	auto_https off
+}
+
+:8080 {
+	# API — FastAPI serves /api/healthz, /api/readyz, /api/v1/*
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	# Everything else — Vite dev server (including HMR websocket)
+	handle {
+		reverse_proxy web:5173
+	}
+}
