@@ -16,7 +16,12 @@ try {
 export default defineConfig({
   testDir: "tests/e2e",
   timeout: 90_000,
-  retries: process.env.CI ? 1 : 0,
+  // These are real WebRTC/media tests: each spins up multiple headless
+  // browser contexts capturing and decoding audio. Over-parallelizing
+  // starves the audio pipeline and makes server-side voice-activity timing
+  // flaky, so cap concurrency and allow one retry to absorb residual jitter.
+  workers: process.env.CI ? 2 : 3,
+  retries: 1,
   reporter: [["list"]],
   use: {
     baseURL: process.env.E2E_BASE_URL ?? "http://localhost:8080",

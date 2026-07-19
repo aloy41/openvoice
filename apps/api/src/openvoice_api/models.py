@@ -64,6 +64,32 @@ class UserSession(Base):
     user_agent: Mapped[str | None] = mapped_column(String(256), nullable=True)
 
 
+class Device(Base):
+    """Per-device public identity key (master prompt required MVP feature;
+    foundation for MLS credentials). The PRIVATE key never reaches the
+    server — only the SPKI-encoded public key is stored. Revocation is soft
+    so a revoked key can never be silently reused."""
+
+    __tablename__ = "devices"
+    __table_args__ = (UniqueConstraint("user_id", "public_key"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid7)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # Base64 SPKI public key. Never store private keys.
+    public_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    key_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default=text("'ecdsa-p256'")
+    )
+    name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class Community(Base):
     __tablename__ = "communities"
 

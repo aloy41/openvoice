@@ -138,7 +138,11 @@ CI fails if the committed schema or generated client drifts from the code.
 - **No E2EE yet** — see the security status above.
 - Accounts are username+password only — **no password recovery exists yet**
   (no email on file); a lost password means a lost account, and the sign-up
-  UI says so. Devices/per-device keys are not implemented yet.
+  UI says so.
+- Each browser registers a per-device identity key (ECDSA P-256, private key
+  kept non-extractable in IndexedDB, never transmitted); view/revoke them via
+  "Devices". These keys are identity/foundation for MLS and do not yet protect
+  content — voice/text E2EE uses the ADR-0006 passphrase.
 - The dev-only shared-password login still exists behind
   `OPENVOICE_DEV_AUTH_ENABLED` (API-only, used by tests); the API refuses to
   start with it in production mode.

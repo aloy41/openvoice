@@ -26,6 +26,7 @@ from .routers import (
     auth,
     communities,
     dev_auth,
+    devices,
     health,
     invites,
     messages,
@@ -170,6 +171,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(health.router, prefix="/api")
     app.include_router(auth.router, prefix="/api/v1")
+    app.include_router(devices.router, prefix="/api/v1")
     app.include_router(dev_auth.router, prefix="/api/v1")
     app.include_router(voice.router, prefix="/api/v1")
     app.include_router(communities.router, prefix="/api/v1")

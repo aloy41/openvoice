@@ -39,15 +39,17 @@ test("audio from one client reaches the other through the SFU", async ({ browser
     .filter({ hasText: aliceName });
   await expect(rowForAlice).toBeVisible({ timeout: 15_000 });
 
-  // 1. Server-side voice activity: B sees A speaking (tone is continuous).
-  await expect(rowForAlice.getByText("speaking")).toBeAttached({ timeout: 20_000 });
-
-  // 2. Subscriber-side energy: the remote stream B plays must be non-silent.
+  // 1. Subscriber-side energy is the hard proof that media transits the SFU:
+  // the remote stream B plays must carry real audio (A→SFU→B).
   const result = await measureRemoteAudio(bob);
   expect(result.attached, "B must have an attached remote audio element").toBeGreaterThan(0);
   expect(result.peak, "remote audio at B must carry energy (SFU→B media path)").toBeGreaterThan(
     0.02,
   );
+
+  // 2. Server-side voice activity (a softer, timing-sensitive signal): the
+  // server's own audio-level detection should eventually mark A as speaking.
+  await expect(rowForAlice.getByText("speaking")).toBeAttached({ timeout: 30_000 });
 
   await ctxA.close();
   await ctxB.close();

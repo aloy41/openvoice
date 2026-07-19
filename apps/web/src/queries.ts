@@ -144,6 +144,32 @@ export function useDeleteMessage() {
 
 export type MemberInfo = components["schemas"]["MemberOut"];
 export type BanInfo = components["schemas"]["BanOut"];
+export type DeviceInfo = components["schemas"]["DeviceOut"];
+
+export function useDevices(enabled: boolean) {
+  return useQuery({
+    queryKey: ["devices"],
+    enabled,
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/devices");
+      if (error || !data) throw new Error("failed to load devices");
+      return data.devices;
+    },
+  });
+}
+
+export function useRevokeDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (deviceId: string) => {
+      const { error } = await api.DELETE("/api/v1/devices/{device_id}", {
+        params: { path: { device_id: deviceId } },
+      });
+      if (error) throw new Error("Could not revoke that device.");
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["devices"] }),
+  });
+}
 
 export function useMembers(communityId: string | null) {
   return useQuery({

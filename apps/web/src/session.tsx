@@ -8,6 +8,25 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from "react";
 
 import { api } from "./api/client";
+import { getLocalDeviceIdentity, rememberCurrentDeviceId } from "./crypto/device";
+
+/** Register this browser's device identity (public key only). Best-effort:
+ * a failure never blocks sign-in — device identity is not yet load-bearing. */
+async function registerDevice(): Promise<void> {
+  try {
+    const identity = await getLocalDeviceIdentity();
+    const { data } = await api.POST("/api/v1/devices", {
+      body: {
+        public_key: identity.publicKeyB64,
+        key_type: identity.keyType,
+        name: identity.name,
+      },
+    });
+    if (data) await rememberCurrentDeviceId(data.device.id);
+  } catch {
+    // ignore — best effort
+  }
+}
 
 export interface SessionUser {
   id: string;
@@ -57,6 +76,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         if (data) {
           setUser(data.user);
           setStatus("signed-in");
+          void registerDevice();
         } else {
           setStatus("signed-out");
         }
@@ -81,6 +101,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         if (error || !data) return { error: describeAuthError(error) };
         setUser(data.user);
         setStatus("signed-in");
+        void registerDevice();
         return { error: null };
       } catch {
         return { error: "Could not reach the server. Is it running?" };
