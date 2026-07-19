@@ -51,3 +51,10 @@ def test_short_livekit_secret_rejected() -> None:
 def test_voice_token_ttl_bounded() -> None:
     with pytest.raises(ValidationError, match="TTL"):
         make_settings(voice_token_ttl_seconds=3600)
+
+
+def test_livekit_ws_url_accepts_origin_and_ws_urls_only() -> None:
+    assert make_settings(livekit_ws_url="origin").livekit_ws_url == "origin"
+    assert make_settings(livekit_ws_url="wss://example.com").livekit_ws_url == "wss://example.com"
+    with pytest.raises(ValidationError, match="LIVEKIT_WS_URL"):
+        make_settings(livekit_ws_url="https://example.com")

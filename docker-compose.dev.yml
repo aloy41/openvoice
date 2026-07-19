@@ -83,7 +83,6 @@ services:
     ports:
       - "8080:8080"
       - "8443:8443"   # HTTPS (internal CA) for LAN devices — mic needs a secure origin
-      - "7443:7443"   # WSS proxy to LiveKit for pages served over HTTPS
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

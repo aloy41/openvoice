@@ -2,17 +2,15 @@
 #
 # :8080  — plain HTTP for same-machine use (localhost is a secure context,
 #          so the microphone works there without TLS).
-# :8443  — HTTPS with Caddy's internal CA, for OTHER devices on your LAN
+# :8443  — HTTPS with Caddy's internal CA for OTHER devices on your LAN
 #          (phones/tablets): browsers only allow microphone capture on
-#          secure origins. Visit https://<lan-ip>:8443 and accept the
-#          certificate warning once per device.
-# :7443  — TLS proxy in front of LiveKit's WebSocket, so pages served over
-#          HTTPS can use wss:// (mixed content rules). Also visit
-#          https://<lan-ip>:7443 once per device to accept the certificate,
-#          otherwise the wss connection fails silently.
+#          secure origins. Accept the certificate warning once per device.
 #
-# Production guidance (real certificates, headers, rate limits) arrives with
-# the Milestone 4 hardened reference deployment.
+# LiveKit signaling (/rtc*) is proxied on BOTH listeners so voice uses the
+# same origin as the page — one port, one certificate acceptance, no
+# separate WSS endpoint to trust. Voice MEDIA still flows directly over the
+# published UDP/TCP ports (SRTP has its own encryption; no certificates
+# involved).
 #
 # NOTE: no global `auto_https off` — that would disable certificate
 # automation entirely, including the explicit `tls internal` sites below
@@ -24,6 +22,9 @@
 }
 
 :8080 {
+	handle /rtc* {
+		reverse_proxy livekit:7880
+	}
 	handle /api/* {
 		reverse_proxy api:8000
 	}
@@ -36,15 +37,13 @@
 # LAN_HOST comes from the compose environment (LIVEKIT_NODE_IP in .env).
 localhost:8443, {$LAN_HOST}:8443 {
 	tls internal
+	handle /rtc* {
+		reverse_proxy livekit:7880
+	}
 	handle /api/* {
 		reverse_proxy api:8000
 	}
 	handle {
 		reverse_proxy web:5173
 	}
-}
-
-localhost:7443, {$LAN_HOST}:7443 {
-	tls internal
-	reverse_proxy livekit:7880
 }
