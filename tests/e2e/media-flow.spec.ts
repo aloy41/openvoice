@@ -15,10 +15,12 @@ import {
   measureRemoteAudio,
   setUpGuestInVoice,
   setUpOwnerInVoice,
+  skipVoiceMedia,
   uniqueName,
 } from "./helpers";
 
 test("audio from one client reaches the other through the SFU", async ({ browser }) => {
+  test.skip(skipVoiceMedia, "real-media voice test — runs locally / self-hosted runners");
   test.setTimeout(90_000);
   const ctxA = await browser.newContext({ permissions: ["microphone"] });
   const ctxB = await browser.newContext({ permissions: ["microphone"] });
