@@ -29,6 +29,22 @@ media devices.
 | Dependency audits: npm audit (high), pip-audit | 0 known vulnerabilities (after pip ≥ 26.1 and pytest ≥ 9.0.3 upgrades) |
 | Workflow lint (actionlint + shellcheck) | clean |
 
+### Follow-up (same day): user-reported audio feedback bug
+
+User report: no mic level feedback during the mic test, no way to hear
+themselves, and no output-device test. Root cause found via in-browser
+diagnostics: an unstable `onPermissionGranted` prop identity caused the
+mic-test restart effect to loop, killing each capture after its first
+(always-silent) analyser frame — the meter never left 0. Fixed by passing a
+stable callback and guarding restarts on the actually-captured device id.
+Also added: "Hear myself" mic monitoring routed to the selected output (with
+echo warning), a "Play test sound" chime for the output device,
+`AudioContext.resume()` guards (suspended contexts read pure silence), and
+the selected output device is now applied to call audio at join time.
+New regression e2e (`audio-check.spec.ts`) drives the real meter with a
+440 Hz fake-capture tone and fails if the level stays 0 or the test
+self-stops; both tests pass.
+
 **Not yet verified** (open Milestone 1 exit items):
 
 - Full one-hour 4-client soak (run `SOAK_MINUTES=60 npx playwright test soak`
