@@ -19,7 +19,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..authz import load_access, not_found, resolve_channel_capabilities
 from ..deps import authenticate, authenticate_unsafe
-from ..events import append_event, event_envelope_from_row, publish_event
+from ..events import (
+    append_event,
+    event_envelope_from_row,
+    publish_event,
+    scrub_message_from_events,
+)
 from ..models import Channel, Event, Message, MessageReaction, User
 from ..permissions import Capability
 from ..rate_limit import check_rate_limit
@@ -289,6 +294,9 @@ async def delete_message(message_id: uuid.UUID, request: Request) -> dict[str, s
         )
         message.deleted_at = datetime.now(tz=UTC)
         message.content = ""  # tombstone: the body is gone, not hidden
+        # Also purge the content from the durable event log — otherwise a
+        # "deleted" message would live on forever inside message.created events.
+        await scrub_message_from_events(db, channel.community_id, message.id)
         envelope = await append_event(
             db,
             channel.community_id,

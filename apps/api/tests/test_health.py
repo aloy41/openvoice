@@ -19,6 +19,20 @@ async def test_healthz_has_request_id_header(client: AsyncClient) -> None:
     assert resp.headers.get("x-request-id")
 
 
+async def test_metrics_prometheus_format(client: AsyncClient) -> None:
+    # Generate some traffic so counters are non-zero.
+    await client.get("/api/healthz")
+    resp = await client.get("/api/metrics")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/plain")
+    body = resp.text
+    assert "openvoice_up 1" in body
+    assert "openvoice_uptime_seconds" in body
+    assert "openvoice_requests_total{" in body
+    # The healthz GET must have been counted as a 2xx request.
+    assert 'method="GET"' in body and 'status="2xx"' in body
+
+
 @requires_db
 async def test_readyz_ok_with_real_dependencies(client: AsyncClient) -> None:
     resp = await client.get("/api/readyz")

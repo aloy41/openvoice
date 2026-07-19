@@ -18,6 +18,7 @@ dependencies = [
     "redis>=5.0,<7",
     "itsdangerous>=2.2,<3",
     "argon2-cffi>=23.1,<26",
+    "cryptography>=48.0.1,<49",
     "livekit-api>=0.8,<2",
     "uuid6>=2024.1",
 ]

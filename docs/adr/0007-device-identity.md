@@ -9,7 +9,7 @@
 feature (master prompt). It is also the foundation MLS needs: MLS group
 membership is keyed by per-device credentials, so devices must have stable
 public keys before automatic group keying can replace the manual passphrase
-(ADR-0006). Full MLS integration is a large, dedicated effort (an audited
+(ADR-0006). Full MLS integration is a large, dedicated effort (a maintained
 WASM MLS library, key-package distribution, media-key wiring); this ADR
 delivers the device layer it depends on without inventing cryptography or
 faking the parts that are not yet built.

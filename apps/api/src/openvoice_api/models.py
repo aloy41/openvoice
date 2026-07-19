@@ -66,6 +66,12 @@ class UserSession(Base):
     # Coarse client description for the user's "your sessions" view. Never
     # store IP addresses or fine-grained fingerprints here.
     user_agent: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # Optional binding to a proven device (ADR-0008). Set once the client
+    # proves possession of the device key; revoking that device revokes this
+    # session. SET NULL so removing a device never deletes the audit trail.
+    device_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("devices.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
 
 class Device(Base):

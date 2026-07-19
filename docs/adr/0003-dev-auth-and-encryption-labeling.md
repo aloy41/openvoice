@@ -43,7 +43,7 @@ encryption "end-to-end encryption".
 - Code, docs, and UI label the current state **"Transport encryption only
   (not end-to-end encrypted)"**. The client renders this state permanently in
   the voice UI. There is no code path, flag, or copy that claims E2EE.
-- E2EE work lands in Milestone 3 behind the threat model and an audited
+- E2EE work lands in Milestone 3 behind the threat model and a reviewed
   key-management ADR; only then may labeling change, and only to reflect
   verified behavior.
 

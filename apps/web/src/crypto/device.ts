@@ -51,6 +51,13 @@ function toB64(buf: ArrayBuffer): string {
   return btoa(s);
 }
 
+function fromB64(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
 async function loadOrCreateKeyPair(): Promise<CryptoKeyPair> {
   const existing = await idbGet<CryptoKeyPair>(KEY_ID);
   if (existing) return existing;
@@ -103,6 +110,22 @@ export async function getLocalDeviceIdentity(): Promise<LocalDeviceIdentity> {
   const pair = await loadOrCreateKeyPair();
   const spki = await crypto.subtle.exportKey("spki", pair.publicKey);
   return { publicKeyB64: toB64(spki), keyType: DEVICE_KEY_TYPE, name: deviceName() };
+}
+
+/**
+ * Sign a server challenge nonce (base64) with this device's private key,
+ * proving possession without ever exposing the key. Returns the base64 raw
+ * IEEE-P1363 (r||s) signature the API verifies (see device_crypto.py).
+ */
+export async function signChallengeNonce(nonceB64: string): Promise<string> {
+  const pair = await loadOrCreateKeyPair();
+  const message = fromB64(nonceB64);
+  const sig = await crypto.subtle.sign(
+    { name: "ECDSA", hash: "SHA-256" },
+    pair.privateKey,
+    message as unknown as BufferSource,
+  );
+  return toB64(sig);
 }
 
 const CURRENT_DEVICE_ID = "current-device-id";

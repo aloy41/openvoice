@@ -1,0 +1,131 @@
+name: E2E — full media suite (voice E2EE, TURN relay, reconnect chaos, soak)
+
+# The real-media suites (voice E2EE, TURN relay, SFU-restart chaos, long soak)
+# need a working WebRTC media path, Docker control on the host, and — for the
+# soak — sustained wall-clock. They do not run on the per-PR `ci.yml` job
+# because shared runners cannot host them reliably. This workflow runs them in
+# a DEDICATED environment: manually (workflow_dispatch) or nightly (schedule).
+#
+# Runner: defaults to `ubuntu-latest`, which can host the single-host media
+# path (loopback TURN via --allow-loopback-in-peer-connection). To run on a
+# self-hosted runner with a real LAN media path, set the repository variable
+# E2E_RUNNER to that runner's label (Settings → Actions → Variables). See
+# docs/operations/dedicated-ci.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_voice:
+        description: "Voice E2EE + media-flow (real audio through the SFU)"
+        type: boolean
+        default: true
+      run_relay:
+        description: "TURN relay-only call (forceRelay, embedded TURN)"
+        type: boolean
+        default: true
+      run_chaos:
+        description: "Reconnect after an SFU (LiveKit) container restart"
+        type: boolean
+        default: true
+      soak_minutes:
+        description: "Soak duration in minutes (0 = skip the soak)"
+        type: string
+        default: "0"
+  schedule:
+    # Nightly at 06:00 UTC. Runs voice/relay/chaos; the soak stays off on the
+    # schedule (set soak_minutes via workflow_dispatch when you want it).
+    - cron: "0 6 * * *"
+
+# Never run two media suites against the same runner/stack at once.
+concurrency:
+  group: e2e-full-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI_SECRET_KEY: ci-only-secret-key-0123456789abcdef0123456789abcdef
+  CI_DEV_PASSWORD: ci-only-dev-password
+  CI_LIVEKIT_SECRET: ci-only-livekit-secret-0123456789abcdef
+
+jobs:
+  full-e2e:
+    name: Full media E2E
+    runs-on: ${{ vars.E2E_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+      # Install host deps BEFORE starting the stack: the web container writes
+      # apps/web/node_modules/.vite into the bind mount as root, which a later
+      # `npm ci` (runner user) cannot remove (EACCES). Same ordering as ci.yml.
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Create .env for the stack
+        run: |
+          cat > .env <<EOF
+          OPENVOICE_ENVIRONMENT=development
+          OPENVOICE_SECRET_KEY=${CI_SECRET_KEY}
+          OPENVOICE_DEV_AUTH_ENABLED=true
+          OPENVOICE_DEV_AUTH_PASSWORD=${CI_DEV_PASSWORD}
+          POSTGRES_PASSWORD=ci-postgres
+          LIVEKIT_API_KEY=devkey
+          LIVEKIT_API_SECRET=${CI_LIVEKIT_SECRET}
+          OPENVOICE_LIVEKIT_WS_URL=origin
+          LIVEKIT_NODE_IP=127.0.0.1
+          EOF
+      - name: Start stack
+        run: docker compose -f docker-compose.dev.yml up -d --build
+      - name: Wait for readiness
+        run: |
+          for _ in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/api/readyz > /dev/null 2>&1; then exit 0; fi
+            sleep 3
+          done
+          echo "stack did not become ready"; docker compose -f docker-compose.dev.yml logs; exit 1
+
+      - name: Voice E2EE + media-flow
+        if: >-
+          github.event_name == 'schedule' ||
+          inputs.run_voice == true
+        env:
+          RUN_VOICE_E2E: "1"
+          OPENVOICE_DEV_AUTH_PASSWORD: ${{ env.CI_DEV_PASSWORD }}
+        run: npx playwright test e2ee media-flow voice-smoke
+
+      - name: TURN relay-only call
+        if: >-
+          github.event_name == 'schedule' ||
+          inputs.run_relay == true
+        env:
+          RUN_RELAY: "1"
+          LIVEKIT_NODE_IP: "127.0.0.1"
+          OPENVOICE_DEV_AUTH_PASSWORD: ${{ env.CI_DEV_PASSWORD }}
+        run: npx playwright test relay
+
+      - name: Reconnect chaos (SFU restart)
+        if: >-
+          github.event_name == 'schedule' ||
+          inputs.run_chaos == true
+        env:
+          RUN_CHAOS: "1"
+          LIVEKIT_CONTAINER: openvoice-dev-livekit-1
+          OPENVOICE_DEV_AUTH_PASSWORD: ${{ env.CI_DEV_PASSWORD }}
+        run: npx playwright test reconnect-chaos
+
+      - name: Soak (long-running stability)
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          inputs.soak_minutes != '0' && inputs.soak_minutes != ''
+        env:
+          SOAK_MINUTES: ${{ inputs.soak_minutes }}
+          OPENVOICE_DEV_AUTH_PASSWORD: ${{ env.CI_DEV_PASSWORD }}
+        run: npx playwright test soak
+
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.dev.yml logs
+      - name: Teardown
+        if: always()
+        run: docker compose -f docker-compose.dev.yml down -v
