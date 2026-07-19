@@ -550,6 +550,41 @@ export interface paths {
         patch: operations["update_role_api_v1_roles__role_id__patch"];
         trace?: never;
     };
+    "/api/v1/users/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Me */
+        get: operations["get_me_api_v1_users_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Me */
+        patch: operations["update_me_api_v1_users_me_patch"];
+        trace?: never;
+    };
+    "/api/v1/users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get User */
+        get: operations["get_user_api_v1_users__user_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -588,7 +623,7 @@ export interface components {
         AuthStateResponse: {
             /** Session Expires At */
             session_expires_at: string | null;
-            user: components["schemas"]["UserOut"];
+            user: components["schemas"]["openvoice_api__routers__auth__UserOut"];
         };
         /** BanCreate */
         BanCreate: {
@@ -711,7 +746,7 @@ export interface components {
             expires_in: number;
             /** Token */
             token: string;
-            user: components["schemas"]["UserOut"];
+            user: components["schemas"]["openvoice_api__routers__dev_auth__UserOut"];
         };
         /** DeviceListOut */
         DeviceListOut: {
@@ -820,6 +855,8 @@ export interface components {
         };
         /** MemberOut */
         MemberOut: {
+            /** Accent Color */
+            accent_color: string | null;
             /** Display Name */
             display_name: string;
             /** Is Owner */
@@ -829,6 +866,8 @@ export interface components {
              * Format: date-time
              */
             joined_at: string;
+            /** Pronouns */
+            pronouns: string | null;
             /**
              * User Id
              * Format: uuid
@@ -856,6 +895,8 @@ export interface components {
         };
         /** MessageOut */
         MessageOut: {
+            /** Author Color */
+            author_color: string | null;
             /**
              * Author Id
              * Format: uuid
@@ -913,6 +954,35 @@ export interface components {
             role_id?: string | null;
             /** User Id */
             user_id?: string | null;
+        };
+        /** ProfileOut */
+        ProfileOut: {
+            /** Accent Color */
+            accent_color: string | null;
+            /** Bio */
+            bio: string | null;
+            /** Display Name */
+            display_name: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Pronouns */
+            pronouns: string | null;
+            /** Username */
+            username: string;
+        };
+        /** ProfilePatch */
+        ProfilePatch: {
+            /** Accent Color */
+            accent_color?: string | null;
+            /** Bio */
+            bio?: string | null;
+            /** Display Name */
+            display_name?: string | null;
+            /** Pronouns */
+            pronouns?: string | null;
         };
         /** RegisterRequest */
         RegisterRequest: {
@@ -992,18 +1062,6 @@ export interface components {
             /** Sessions */
             sessions: components["schemas"]["SessionInfo"][];
         };
-        /** UserOut */
-        UserOut: {
-            /** Display Name */
-            display_name: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Username */
-            username: string;
-        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -1029,6 +1087,34 @@ export interface components {
             token: string;
             /** Ws Url */
             ws_url: string;
+        };
+        /** UserOut */
+        openvoice_api__routers__auth__UserOut: {
+            /** Accent Color */
+            accent_color?: string | null;
+            /** Display Name */
+            display_name: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Pronouns */
+            pronouns?: string | null;
+            /** Username */
+            username: string;
+        };
+        /** UserOut */
+        openvoice_api__routers__dev_auth__UserOut: {
+            /** Display Name */
+            display_name: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Username */
+            username: string;
         };
     };
     responses: never;
@@ -2293,6 +2379,90 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RoleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_me_api_v1_users_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileOut"];
+                };
+            };
+        };
+    };
+    update_me_api_v1_users_me_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfilePatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_user_api_v1_users__user_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileOut"];
                 };
             };
             /** @description Validation Error */

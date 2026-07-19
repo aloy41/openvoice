@@ -8,6 +8,7 @@ import { useDeleteMessage, useEditMessage, useMessages, useSendMessage } from ".
 import { useSession } from "../session";
 import { clockTime, relativeTime } from "../time";
 import { Avatar } from "./Avatar";
+import { ProfileCard } from "./ProfileCard";
 import { RichText } from "./RichText";
 
 function MediaEmbeds({ text }: { text: string }) {
@@ -81,6 +82,7 @@ export function TextChannelView({ channel, passphrase, onPassphraseChange }: Tex
   const [sendError, setSendError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
+  const [cardUserId, setCardUserId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
 
   const canSend = channel.capabilities.includes("SEND_MESSAGES");
@@ -190,7 +192,13 @@ export function TextChannelView({ channel, passphrase, onPassphraseChange }: Tex
               >
                 <div className="w-9 shrink-0 pt-0.5">
                   {!grouped ? (
-                    <Avatar name={m.author_name} size="md" />
+                    <button
+                      onClick={() => setCardUserId(m.author_id)}
+                      aria-label={`View ${m.author_name}'s profile`}
+                      className="rounded-full"
+                    >
+                      <Avatar name={m.author_name} size="md" color={m.author_color} />
+                    </button>
                   ) : (
                     <span className="hidden text-right text-[10px] leading-6 text-slate-600 group-hover:block">
                       {clockTime(m.created_at)}
@@ -200,7 +208,13 @@ export function TextChannelView({ channel, passphrase, onPassphraseChange }: Tex
                 <div className="min-w-0 flex-1">
                   {!grouped && (
                     <div className="flex items-baseline gap-2">
-                      <span className="text-sm font-semibold text-slate-200">{m.author_name}</span>
+                      <button
+                        onClick={() => setCardUserId(m.author_id)}
+                        className="text-sm font-semibold text-slate-200 hover:underline"
+                        style={m.author_color ? { color: m.author_color } : undefined}
+                      >
+                        {m.author_name}
+                      </button>
                       <span className="text-xs text-slate-500" title={new Date(m.created_at).toLocaleString()}>
                         {relativeTime(m.created_at)}
                       </span>
@@ -324,6 +338,7 @@ export function TextChannelView({ channel, passphrase, onPassphraseChange }: Tex
           </p>
         )}
       </div>
+      {cardUserId && <ProfileCard userId={cardUserId} onClose={() => setCardUserId(null)} />}
     </section>
   );
 }

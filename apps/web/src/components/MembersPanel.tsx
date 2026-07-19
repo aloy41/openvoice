@@ -4,6 +4,7 @@ import type { CommunityDetail } from "../queries";
 import { useBanMember, useBans, useKickMember, useMembers, useUnbanMember } from "../queries";
 import { useSession } from "../session";
 import { Avatar } from "./Avatar";
+import { ProfileCard } from "./ProfileCard";
 
 interface MembersPanelProps {
   detail: CommunityDetail;
@@ -28,6 +29,7 @@ export function MembersPanel({ detail }: MembersPanelProps) {
     null,
   );
   const [error, setError] = useState<string | null>(null);
+  const [cardUserId, setCardUserId] = useState<string | null>(null);
 
   async function runConfirmed() {
     if (!confirming) return;
@@ -65,11 +67,20 @@ export function MembersPanel({ detail }: MembersPanelProps) {
               className="group rounded-md px-2 py-1.5 text-sm hover:bg-slate-800/60"
             >
               <div className="flex items-center gap-2">
-                <Avatar name={m.display_name} size="sm" />
-                <span className="min-w-0 flex-1 truncate text-slate-200">
+                <button
+                  onClick={() => setCardUserId(m.user_id)}
+                  aria-label={`View ${m.display_name}'s profile`}
+                  className="rounded-full"
+                >
+                  <Avatar name={m.display_name} size="sm" color={m.accent_color} />
+                </button>
+                <button
+                  onClick={() => setCardUserId(m.user_id)}
+                  className="min-w-0 flex-1 truncate text-left text-slate-200 hover:underline"
+                >
                   {m.display_name}
                   {isSelf && <span className="text-slate-400"> (you)</span>}
-                </span>
+                </button>
                 {m.is_owner && (
                   <span className="rounded bg-amber-900/50 px-1.5 py-0.5 text-xs text-amber-300">
                     owner
@@ -147,6 +158,7 @@ export function MembersPanel({ detail }: MembersPanelProps) {
           </ul>
         </>
       )}
+      {cardUserId && <ProfileCard userId={cardUserId} onClose={() => setCardUserId(null)} />}
     </aside>
   );
 }

@@ -58,7 +58,9 @@ test("the device key persists across reloads (same device, not a new one)", asyn
 
   // Reload: the IndexedDB keypair is reused, so still exactly one device.
   await page.reload();
-  await expect(page.getByText("Signed in as")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Edit your profile" })).toBeVisible({
+    timeout: 15_000,
+  });
   await page.getByRole("button", { name: "Devices" }).click();
   await expect(
     page.getByRole("dialog", { name: "Your devices" }).getByRole("listitem"),

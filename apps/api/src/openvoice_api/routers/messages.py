@@ -52,6 +52,7 @@ class MessageOut(BaseModel):
     channel_id: uuid.UUID
     author_id: uuid.UUID
     author_name: str
+    author_color: str | None
     scheme: str
     content: str
     created_at: datetime
@@ -71,13 +72,14 @@ class EventListOut(BaseModel):
     latest_seq: int
 
 
-def _message_out(message: Message, author_name: str) -> MessageOut:
+def _message_out(message: Message, author_name: str, author_color: str | None) -> MessageOut:
     deleted = message.deleted_at is not None
     return MessageOut(
         id=message.id,
         channel_id=message.channel_id,
         author_id=message.author_id,
         author_name=author_name,
+        author_color=author_color,
         scheme="plaintext" if deleted else message.scheme,
         content="" if deleted else message.content,
         created_at=message.created_at,
@@ -112,7 +114,7 @@ async def list_messages(
         if not caps & Capability.VIEW_CHANNELS:
             raise not_found()
         query = (
-            select(Message, User.display_name)
+            select(Message, User.display_name, User.accent_color)
             .join(User, User.id == Message.author_id)
             .where(Message.channel_id == channel_id)
         )
@@ -121,7 +123,7 @@ async def list_messages(
         rows = (await db.execute(query.order_by(Message.id.desc()).limit(PAGE_SIZE + 1))).all()
     has_more = len(rows) > PAGE_SIZE
     rows = rows[:PAGE_SIZE]
-    messages = [_message_out(m, name) for m, name in reversed(rows)]
+    messages = [_message_out(m, name, color) for m, name, color in reversed(rows)]
     return MessageListOut(
         messages=messages,
         next_cursor=rows[-1][0].id if has_more and rows else None,
@@ -164,7 +166,7 @@ async def send_message(channel_id: uuid.UUID, body: MessageCreate, request: Requ
         )
         db.add(message)
         await db.flush()
-        out = _message_out(message, ctx.user.display_name)
+        out = _message_out(message, ctx.user.display_name, ctx.user.accent_color)
         envelope = await append_event(
             db,
             channel.community_id,
@@ -220,7 +222,7 @@ async def edit_message(message_id: uuid.UUID, body: MessagePatch, request: Reque
         message.content = body.content
         message.scheme = body.scheme
         message.edited_at = datetime.now(tz=UTC)
-        out = _message_out(message, ctx.user.display_name)
+        out = _message_out(message, ctx.user.display_name, ctx.user.accent_color)
         envelope = await append_event(
             db,
             channel.community_id,

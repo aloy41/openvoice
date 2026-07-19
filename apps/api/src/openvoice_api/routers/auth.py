@@ -55,6 +55,8 @@ class UserOut(BaseModel):
     id: uuid.UUID
     username: str
     display_name: str
+    accent_color: str | None = None
+    pronouns: str | None = None
 
 
 class SessionInfo(BaseModel):
@@ -73,6 +75,16 @@ class AuthStateResponse(BaseModel):
 
 class SessionListResponse(BaseModel):
     sessions: list[SessionInfo]
+
+
+def _user_out(user: User) -> UserOut:
+    return UserOut(
+        id=user.id,
+        username=user.username,
+        display_name=user.display_name,
+        accent_color=user.accent_color,
+        pronouns=user.pronouns,
+    )
 
 
 def _client_key(request: Request, username: str) -> str:
@@ -178,7 +190,7 @@ async def register(
     expires_at = await _create_session(request, response, user)
     log.info("account created", extra={"extra_fields": {"user_id": str(user.id)}})
     return AuthStateResponse(
-        user=UserOut(id=user.id, username=user.username, display_name=user.display_name),
+        user=_user_out(user),
         session_expires_at=expires_at,
     )
 
@@ -205,7 +217,7 @@ async def login(body: LoginRequest, request: Request, response: Response) -> Aut
         await db.refresh(user)
     expires_at = await _create_session(request, response, user)
     return AuthStateResponse(
-        user=UserOut(id=user.id, username=user.username, display_name=user.display_name),
+        user=_user_out(user),
         session_expires_at=expires_at,
     )
 
@@ -237,9 +249,7 @@ async def current_session(request: Request) -> AuthStateResponse:
             if session is not None:
                 expires_at = session.expires_at
     return AuthStateResponse(
-        user=UserOut(
-            id=ctx.user.id, username=ctx.user.username, display_name=ctx.user.display_name
-        ),
+        user=_user_out(ctx.user),
         session_expires_at=expires_at,
     )
 
