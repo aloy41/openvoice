@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import os
 import subprocess
+import uuid
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -90,3 +92,29 @@ async def login(client: AsyncClient, username: str = "alice") -> str:
     )
     assert resp.status_code == 200, resp.text
     return str(resp.json()["token"])
+
+
+TEST_USER_PASSWORD = "test-password-123"  # fake credential for tests only
+
+
+def uname(prefix: str) -> str:
+    """Unique username per call: avoids cross-run auth rate-limit windows and
+    cross-test collisions."""
+    return f"{prefix}-{uuid.uuid4().hex[:8]}"
+
+
+@asynccontextmanager
+async def user_client(app: FastAPI, username: str) -> AsyncIterator[AsyncClient]:
+    """A registered, cookie-authenticated client with the CSRF header
+    pre-attached to every request."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        await c.get("/api/healthz")
+        csrf = c.cookies.get("ov_csrf")
+        assert csrf
+        c.headers.update({"x-csrf-token": csrf})
+        resp = await c.post(
+            "/api/v1/auth/register",
+            json={"username": username, "password": TEST_USER_PASSWORD},
+        )
+        assert resp.status_code == 200, resp.text
+        yield c

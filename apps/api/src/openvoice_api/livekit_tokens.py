@@ -30,11 +30,17 @@ def resolve_ws_url(settings: Settings, forwarded_proto: str | None, host: str | 
     return f"{scheme}://{host or 'localhost'}"
 
 
-def mint_voice_token(
-    settings: Settings, user: User, ws_url: str | None = None
+def mint_room_token(
+    settings: Settings,
+    user: User,
+    *,
+    room: str,
+    can_publish: bool,
+    ws_url: str | None = None,
 ) -> dict[str, str | int]:
+    """Mint a short-lived audio token for a server-derived room. can_publish
+    reflects the SPEAK capability; listeners without it can only subscribe."""
     identity = f"user-{user.id}"
-    room = settings.dev_voice_room
     token = (
         api.AccessToken(settings.livekit_api_key, settings.livekit_api_secret.get_secret_value())
         .with_identity(identity)
@@ -44,7 +50,7 @@ def mint_voice_token(
             api.VideoGrants(
                 room_join=True,
                 room=room,
-                can_publish=True,
+                can_publish=can_publish,
                 can_subscribe=True,
                 can_publish_data=False,
             )
@@ -58,3 +64,12 @@ def mint_voice_token(
         "identity": identity,
         "expires_in": settings.voice_token_ttl_seconds,
     }
+
+
+def mint_voice_token(
+    settings: Settings, user: User, ws_url: str | None = None
+) -> dict[str, str | int]:
+    """Dev-room token (Milestone 1 flow; replaced by channel tokens)."""
+    return mint_room_token(
+        settings, user, room=settings.dev_voice_room, can_publish=True, ws_url=ws_url
+    )
