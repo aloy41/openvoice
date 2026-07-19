@@ -18,6 +18,7 @@ import {
   measureRemoteAudio,
   openVoiceChannel,
   registerAndSignIn,
+  skipVoiceMedia,
   uniqueName,
 } from "./helpers";
 
@@ -34,6 +35,7 @@ async function joinVoiceEncrypted(page: Page, passphrase: string) {
 }
 
 test("same passphrase decrypts; wrong passphrase hears only silence", async ({ browser }) => {
+  test.skip(skipVoiceMedia, "real-media voice E2EE test — runs locally / self-hosted runners");
   test.setTimeout(120_000);
   const ctxA = await browser.newContext({ permissions: ["microphone"] });
   const ctxB = await browser.newContext({ permissions: ["microphone"] });

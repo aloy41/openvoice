@@ -13,6 +13,7 @@ import {
   joinVoice,
   openVoiceChannel,
   registerAndSignIn,
+  skipVoiceMedia,
   uniqueName,
 } from "./helpers";
 
@@ -50,8 +51,11 @@ test("home, community workspace, and in-call screens have no axe violations", as
   await openVoiceChannel(page);
   await expectNoViolations(page, "workspace-pre-join");
 
-  await joinVoice(page);
-  await expect(page.getByRole("list", { name: "Participants" })).toBeVisible();
-  await expectNoViolations(page, "in-call");
+  // The in-call scan needs a real LiveKit join, which is skipped on CI runners.
+  if (!skipVoiceMedia) {
+    await joinVoice(page);
+    await expect(page.getByRole("list", { name: "Participants" })).toBeVisible();
+    await expectNoViolations(page, "in-call");
+  }
   await ctx.close();
 });

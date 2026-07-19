@@ -4,6 +4,15 @@ import type { Page } from "@playwright/test";
 
 export const E2E_PASSWORD = "e2e-test-password-1";
 
+/**
+ * Real-media voice tests join LiveKit and capture/decode audio, which does not
+ * run reliably on shared CI runners (no real UDP media path, limited CPU/RAM —
+ * the browser workers crash). Skip them in CI unless RUN_VOICE_E2E=1 (e.g. a
+ * self-hosted runner); they always run locally. Everything that doesn't need
+ * real media still runs in CI.
+ */
+export const skipVoiceMedia = !!process.env.CI && !process.env.RUN_VOICE_E2E;
+
 // Unique per test run so registrations never collide with previous runs.
 const RUN_ID = Math.random().toString(36).slice(2, 8);
 

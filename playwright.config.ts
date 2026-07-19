@@ -16,11 +16,11 @@ try {
 export default defineConfig({
   testDir: "tests/e2e",
   timeout: 90_000,
-  // These are real WebRTC/media tests: each spins up multiple headless
-  // browser contexts capturing and decoding audio. Over-parallelizing
-  // starves the audio pipeline and makes server-side voice-activity timing
-  // flaky, so cap concurrency and allow one retry to absorb residual jitter.
-  workers: process.env.CI ? 2 : 3,
+  // Real-media tests spin up multiple headless browser contexts that capture
+  // and decode audio; over-parallelizing starves the audio pipeline and makes
+  // voice-activity timing flaky. Locally: cap at 3. On CI the compose stack
+  // shares the runner's ~2 cores, so run serially for stability.
+  workers: process.env.CI ? 1 : 3,
   retries: 1,
   reporter: [["list"]],
   use: {

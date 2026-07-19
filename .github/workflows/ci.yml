@@ -33,8 +33,8 @@ jobs:
           --health-cmd "redis-cli ping" --health-interval 5s
           --health-timeout 3s --health-retries 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install
@@ -65,11 +65,11 @@ jobs:
     name: OpenAPI contract & generated client drift
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm
@@ -90,8 +90,8 @@ jobs:
     name: Web — lint, types, tests, build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm
@@ -107,7 +107,7 @@ jobs:
     name: API — production image builds
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build image
         run: docker build -t openvoice-api:ci apps/api
 
@@ -115,7 +115,7 @@ jobs:
     name: Secret scanning (gitleaks)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v2
@@ -123,11 +123,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   e2e:
-    name: E2E — two-client voice smoke (full stack)
+    name: E2E — full-stack flows (chat, reactions, presence, …)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm
@@ -154,7 +154,10 @@ jobs:
           echo "stack did not become ready"; docker compose -f docker-compose.dev.yml logs; exit 1
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - name: Run smoke test
+      # Real-media voice tests (LiveKit join + audio decode) are skipped here —
+      # shared runners have no reliable WebRTC media path. They run locally and
+      # on self-hosted runners (set RUN_VOICE_E2E=1). See tests/e2e/helpers.ts.
+      - name: Run end-to-end flows
         env:
           OPENVOICE_DEV_AUTH_PASSWORD: ${{ env.CI_DEV_PASSWORD }}
         run: npm run test:e2e

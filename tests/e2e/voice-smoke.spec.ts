@@ -10,10 +10,12 @@ import {
   registerAndSignIn,
   setUpGuestInVoice,
   setUpOwnerInVoice,
+  skipVoiceMedia,
   uniqueName,
 } from "./helpers";
 
 test("invite flow: two clients meet in an authorized voice channel", async ({ browser }) => {
+  test.skip(skipVoiceMedia, "real-media voice test — runs locally / self-hosted runners");
   test.setTimeout(90_000);
   const contextA = await browser.newContext({ permissions: ["microphone"] });
   const contextB = await browser.newContext({ permissions: ["microphone"] });
