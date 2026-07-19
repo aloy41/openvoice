@@ -4,12 +4,15 @@ export interface ParticipantListProps {
   participants: VoiceParticipant[];
   getVolume: (identity: string) => number;
   onVolumeChange: (identity: string, volume: number) => void;
+  /** Show per-participant frame-encryption state (E2EE calls only). */
+  showEncryption?: boolean;
 }
 
 export function ParticipantList({
   participants,
   getVolume,
   onVolumeChange,
+  showEncryption = false,
 }: ParticipantListProps) {
   if (participants.length === 0) return null;
   return (
@@ -30,6 +33,19 @@ export function ParticipantList({
             {p.isLocal && <span className="text-slate-400"> (you)</span>}
           </span>
           {p.speaking && <span className="sr-only">speaking</span>}
+          {showEncryption &&
+            (p.encrypted ? (
+              <span title="Sending end-to-end encrypted audio" aria-label="encrypted">
+                🔐
+              </span>
+            ) : (
+              <span
+                className="rounded bg-amber-950/60 px-1.5 py-0.5 text-xs text-amber-300"
+                aria-label="not encrypted"
+              >
+                not encrypted
+              </span>
+            ))}
           {p.micMuted && (
             <span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs text-slate-400">
               muted

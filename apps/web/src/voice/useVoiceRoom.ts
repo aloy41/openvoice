@@ -13,12 +13,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ConnectionState,
+  ExternalE2EEKeyProvider,
   RemoteAudioTrack,
   Room,
   RoomEvent,
   Track,
 } from "livekit-client";
-import type { Participant, RemoteTrack } from "livekit-client";
+import type { Participant, RemoteTrack, RoomOptions } from "livekit-client";
 
 import { api } from "../api/client";
 import { CONNECT_FAILED, describeMediaError, describeTokenError } from "./errors";
@@ -38,6 +39,8 @@ export interface VoiceParticipant {
   isLocal: boolean;
   speaking: boolean;
   micMuted: boolean;
+  /** Frame-encryption state; only meaningful while E2EE is active. */
+  encrypted: boolean;
 }
 
 export interface VoiceChannelRef {
@@ -50,6 +53,8 @@ export interface UseVoiceRoom {
   error: VoiceErrorInfo | null;
   /** The channel currently joined (or being joined). */
   channel: VoiceChannelRef | null;
+  /** True when this call uses passphrase E2EE (ADR-0006). */
+  e2eeActive: boolean;
   participants: VoiceParticipant[];
   muted: boolean;
   deafened: boolean;
@@ -57,6 +62,7 @@ export interface UseVoiceRoom {
     channel: VoiceChannelRef,
     micDeviceId?: string,
     outputDeviceId?: string,
+    e2eePassphrase?: string,
   ) => Promise<void>;
   leave: () => Promise<void>;
   toggleMute: () => Promise<void>;
@@ -72,6 +78,8 @@ export function useVoiceRoom(): UseVoiceRoom {
   const [status, setStatus] = useState<VoiceStatus>("idle");
   const [error, setError] = useState<VoiceErrorInfo | null>(null);
   const [channel, setChannel] = useState<VoiceChannelRef | null>(null);
+  const [e2eeActive, setE2eeActive] = useState(false);
+  const e2eeWorkerRef = useRef<Worker | null>(null);
   const [participants, setParticipants] = useState<VoiceParticipant[]>([]);
   const [muted, setMuted] = useState(false);
   const [deafened, setDeafenedState] = useState(false);
@@ -99,6 +107,7 @@ export function useVoiceRoom(): UseVoiceRoom {
       isLocal,
       speaking: speaking.has(p.identity),
       micMuted: !p.isMicrophoneEnabled,
+      encrypted: p.isEncrypted,
     });
     const list = [toEntry(room.localParticipant, true)];
     for (const p of room.remoteParticipants.values()) list.push(toEntry(p, false));
@@ -130,12 +139,20 @@ export function useVoiceRoom(): UseVoiceRoom {
     roomRef.current = null;
     if (room) room.removeAllListeners();
     if (audioElsRef.current) audioElsRef.current.replaceChildren();
+    e2eeWorkerRef.current?.terminate();
+    e2eeWorkerRef.current = null;
     setParticipants([]);
     setChannel(null);
+    setE2eeActive(false);
   }, []);
 
   const join = useCallback(
-    async (target: VoiceChannelRef, micDeviceId?: string, outputDeviceId?: string) => {
+    async (
+      target: VoiceChannelRef,
+      micDeviceId?: string,
+      outputDeviceId?: string,
+      e2eePassphrase?: string,
+    ) => {
       if (roomRef.current) return; // already joined/joining
       setError(null);
       setStatus("requesting-token");
@@ -166,12 +183,26 @@ export function useVoiceRoom(): UseVoiceRoom {
         return;
       }
 
-      const room = new Room({
+      const roomOptions: RoomOptions = {
         // exact: a bare deviceId is only a preference and the browser may
         // substitute a different device (e.g. a vendor's virtual mic).
         audioCaptureDefaults: micDeviceId ? { deviceId: { exact: micDeviceId } } : undefined,
         audioOutput: outputDeviceId ? { deviceId: outputDeviceId } : undefined,
-      });
+      };
+      // Passphrase E2EE (ADR-0006): the key is derived client-side (PBKDF2
+      // inside LiveKit's audited SDK) and NEVER leaves this browser — the
+      // API has no code path that can receive key material.
+      let keyProvider: ExternalE2EEKeyProvider | null = null;
+      if (e2eePassphrase) {
+        keyProvider = new ExternalE2EEKeyProvider();
+        const worker = new Worker(
+          new URL("livekit-client/e2ee-worker", import.meta.url),
+          { type: "module" },
+        );
+        e2eeWorkerRef.current = worker;
+        roomOptions.e2ee = { keyProvider, worker };
+      }
+      const room = new Room(roomOptions);
       roomRef.current = room;
       intentionalLeaveRef.current = false;
 
@@ -202,7 +233,25 @@ export function useVoiceRoom(): UseVoiceRoom {
         .on(RoomEvent.TrackUnsubscribed, (track) => {
           track.detach().forEach((el) => el.remove());
           syncParticipants();
-        });
+        })
+        .on(RoomEvent.ParticipantEncryptionStatusChanged, syncParticipants);
+
+      if (keyProvider && e2eePassphrase) {
+        try {
+          await keyProvider.setKey(e2eePassphrase);
+          await room.setE2EEEnabled(true);
+          setE2eeActive(true);
+        } catch {
+          cleanupRoom();
+          setError({
+            code: "e2ee_unavailable",
+            message:
+              "End-to-end encryption could not be enabled in this browser (insertable streams unsupported). The call was NOT started without encryption.",
+          });
+          setStatus("idle");
+          return;
+        }
+      }
 
       setStatus("connecting");
       // Diagnostic flag (?forceRelay=1): restrict ICE to relay candidates so
@@ -337,6 +386,7 @@ export function useVoiceRoom(): UseVoiceRoom {
     status,
     error,
     channel,
+    e2eeActive,
     participants,
     muted,
     deafened,

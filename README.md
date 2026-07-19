@@ -13,16 +13,21 @@ no mandatory hosted services.
 
 ## Security status — read this first
 
-**Voice in this milestone is NOT end-to-end encrypted.**
+**Voice calls support opt-in end-to-end encryption via a shared passphrase
+(ADR-0006). Text messages are NOT end-to-end encrypted yet.**
 
-Media between each client and the LiveKit SFU is protected by WebRTC transport
-encryption (DTLS-SRTP). That protects against passive network observers, but the
-SFU — and therefore whoever operates this server — can access the media it routes.
-Application-level E2EE (where the SFU and control plane cannot decrypt media) is
-planned for Milestone 3 using LiveKit's maintained E2EE support and audited key
-management. Until that ships and is verified, no part of this project's UI or
-documentation labels sessions "end-to-end encrypted", and the client explicitly
-shows the current state as "Transport encryption only".
+- With a call passphrase (entered by every participant, shared out-of-band),
+  audio frames are encrypted in the browser using LiveKit's maintained E2EE
+  worker before they reach the network — the SFU, API, database, and operator
+  cannot access the audio. An automated test proves a fully authorized client
+  with the wrong passphrase receives only undecryptable silence. Honest
+  limits: anyone with the passphrase and channel access can decrypt, and
+  removing a member does not rotate the key — MLS-based automatic group
+  keying is the planned completion of Milestone 3.
+- Without a passphrase, voice uses WebRTC transport encryption (DTLS-SRTP)
+  only: the SFU can access media, and the UI says so.
+- Text messages are transport-encrypted only; ciphertext envelopes arrive
+  with the rest of Milestone 3.
 
 See [`docs/security/threat-model.md`](docs/security/threat-model.md) for the
 threat model skeleton and current trust boundaries.
