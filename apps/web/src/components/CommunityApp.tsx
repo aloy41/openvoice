@@ -5,22 +5,62 @@
  * communities.
  */
 import { useCallback, useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Room } from "livekit-client";
 
 import { useCommunities, useCommunityDetail } from "../queries";
+import type { MessageInfo } from "../queries";
+import { useCommunityEvents } from "../realtime";
+import type { CommunityEvent } from "../realtime";
 import { useVoiceRoom } from "../voice/useVoiceRoom";
 import { ChannelSidebar } from "./ChannelSidebar";
 import { CommunityRail } from "./CommunityRail";
 import { EncryptionNotice } from "./EncryptionNotice";
 import { HomePane } from "./HomePane";
+import { TextChannelView } from "./TextChannelView";
 import { VoiceWorkspace } from "./VoiceWorkspace";
 
 export function CommunityApp() {
   const voice = useVoiceRoom();
   const communities = useCommunities();
+  const queryClient = useQueryClient();
   const [selectedCommunityId, setSelectedCommunityId] = useState<string | null>(null);
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
   const detail = useCommunityDetail(selectedCommunityId);
+
+  // Live events for the selected community: keep the message caches fresh.
+  useCommunityEvents(
+    selectedCommunityId,
+    useCallback(
+      (event: CommunityEvent) => {
+        if (event.type === "message.created" || event.type === "message.updated") {
+          const message = event.payload.message as MessageInfo;
+          queryClient.setQueryData<MessageInfo[]>(
+            ["messages", message.channel_id],
+            (old) => {
+              if (!old) return old;
+              const existing = old.findIndex((m) => m.id === message.id);
+              if (existing >= 0) {
+                const next = [...old];
+                next[existing] = message;
+                return next;
+              }
+              return [...old, message];
+            },
+          );
+        } else if (event.type === "message.deleted") {
+          const channelId = event.payload.channel_id as string;
+          const messageId = event.payload.message_id as string;
+          queryClient.setQueryData<MessageInfo[]>(["messages", channelId], (old) =>
+            old?.map((m) =>
+              m.id === messageId ? { ...m, deleted: true, content: "" } : m,
+            ),
+          );
+        }
+      },
+      [queryClient],
+    ),
+  );
 
   const [mics, setMics] = useState<MediaDeviceInfo[]>([]);
   const [outputs, setOutputs] = useState<MediaDeviceInfo[]>([]);
@@ -93,12 +133,8 @@ export function CommunityApp() {
                 </p>
               )}
               {selectedChannel?.kind === "text" && (
-                <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
-                  <h2 className="text-base font-semibold">#{selectedChannel.name}</h2>
-                  <p className="mt-2 text-sm text-slate-400">
-                    Text chat is not built yet — it arrives with a later update (and it will
-                    be end-to-end encrypted when it does). Voice channels work today.
-                  </p>
+                <div className="h-[calc(100vh-14rem)] min-h-64">
+                  <TextChannelView channel={selectedChannel} />
                 </div>
               )}
               {selectedChannel?.kind === "voice" && (

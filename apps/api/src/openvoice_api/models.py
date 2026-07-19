@@ -74,6 +74,9 @@ class Community(Base):
     owner_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
+    # Monotonic per-community event sequence; incremented atomically in the
+    # same transaction as the change each event describes.
+    event_seq: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
@@ -215,6 +218,52 @@ class Ban(Base):
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class Message(Base):
+    """Text-channel message. Content is currently transport-encrypted only
+    (never claimed otherwise in the UI); Milestone 3 replaces the content
+    column with a ciphertext envelope. Deletion tombstones the row (content
+    cleared, deleted_at set) so ordering and edit history semantics stay
+    stable."""
+
+    __tablename__ = "messages"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid7)
+    channel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("channels.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    author_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    content: Mapped[str] = mapped_column(String(4000), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class Event(Base):
+    """Durable, per-community ordered event log. Reconnecting clients replay
+    from their last seen seq instead of trusting missed WebSocket frames."""
+
+    __tablename__ = "events"
+    __table_args__ = (UniqueConstraint("community_id", "seq"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid7)
+    community_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("communities.id", ondelete="CASCADE"), nullable=False
+    )
+    seq: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    type: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
 
 class AuditEvent(Base):
