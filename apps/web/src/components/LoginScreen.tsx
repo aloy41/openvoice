@@ -70,7 +70,7 @@ export function LoginScreen() {
           <button
             type="submit"
             disabled={busy}
-            className="w-full rounded-md bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-50"
+            className="w-full rounded-md bg-sky-700 px-3 py-2 text-sm font-medium text-white hover:bg-sky-800 disabled:opacity-50"
           >
             {busy ? "Signing in…" : "Sign in"}
           </button>

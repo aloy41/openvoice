@@ -13,8 +13,10 @@ WORKDIR /app
 COPY . .
 
 # constraints.txt pins exact resolved versions (regenerate with
-# `pip freeze` after intentional upgrades).
-RUN PIP_CONSTRAINT=constraints.txt pip install -e ".[dev]"
+# `pip freeze` after intentional upgrades). pip itself is upgraded first —
+# the base image's pip has known advisories (PYSEC-2026-2875/-2876).
+RUN pip install --upgrade "pip>=26.1" && \
+    PIP_CONSTRAINT=constraints.txt pip install -e ".[dev]"
 
 RUN useradd --create-home app
 USER app

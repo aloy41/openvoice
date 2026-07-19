@@ -30,7 +30,7 @@ export function VoiceControls({
         <button
           onClick={onJoin}
           disabled={joining}
-          className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+          className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
         >
           {joining ? "Joining…" : status === "disconnected" ? "Rejoin voice" : "Join voice"}
         </button>
