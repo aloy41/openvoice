@@ -28,7 +28,7 @@ services:
 
   livekit:
     image: livekit/livekit-server:v1.9.11
-    command: --config /etc/livekit.yaml
+    command: --config /etc/livekit.yaml --node-ip ${LIVEKIT_NODE_IP:-127.0.0.1}
     environment:
       # Key/secret pair shared with the API for token signing. Values come
       # from .env (dev-only placeholders; never commit real secrets).
@@ -38,6 +38,8 @@ services:
     ports:
       - "7880:7880"                 # WebSocket signaling
       - "7881:7881"                 # WebRTC over TCP fallback
+      - "3478:3478/udp"             # TURN/UDP (dev relay validation)
+      - "30000-30100:30000-30100/udp"  # TURN relay allocations
       - "50000-50100:50000-50100/udp"  # WebRTC media
 
   api:

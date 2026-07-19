@@ -189,8 +189,15 @@ export function useVoiceRoom(sessionToken: string): UseVoiceRoom {
         });
 
       setStatus("connecting");
+      // Diagnostic flag (?forceRelay=1): restrict ICE to relay candidates so
+      // the TURN path can be validated end-to-end. Harmless in normal use.
+      const forceRelay = new URLSearchParams(window.location.search).has("forceRelay");
       try {
-        await room.connect(grant.ws_url, grant.token);
+        await room.connect(
+          grant.ws_url,
+          grant.token,
+          forceRelay ? { rtcConfig: { iceTransportPolicy: "relay" } } : undefined,
+        );
       } catch {
         cleanupRoom();
         setError(CONNECT_FAILED);
