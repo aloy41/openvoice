@@ -12,12 +12,13 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import UTC, datetime
-from typing import Any
+from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 
 import redis.asyncio as aioredis
-from sqlalchemy import update
+from sqlalchemy import CursorResult, delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from .models import Community, Event
 
@@ -67,6 +68,63 @@ async def publish_event(redis: aioredis.Redis, envelope: dict[str, Any]) -> None
             "event publish failed; subscribers will catch up from the log",
             extra={"extra_fields": {"type": envelope.get("type")}},
         )
+
+
+async def scrub_message_from_events(
+    db: AsyncSession, community_id: uuid.UUID, message_id: uuid.UUID
+) -> None:
+    """Remove a message's content from the durable event log so a deletion
+    actually erases the content everywhere — not just from the messages table.
+    The message.created/updated events for this id keep their envelope (id,
+    author, channel, timestamps) but their content is emptied and marked
+    scrubbed, so a reconnecting client replays a content-free record."""
+    events = (
+        (
+            await db.execute(
+                select(Event).where(
+                    Event.community_id == community_id,
+                    Event.type.in_(("message.created", "message.updated")),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    target = str(message_id)
+    for event in events:
+        payload = event.payload
+        message = payload.get("message") if isinstance(payload, dict) else None
+        if isinstance(message, dict) and message.get("id") == target:
+            new_message = {**message, "content": "", "scheme": "plaintext", "scrubbed": True}
+            event.payload = {**payload, "message": new_message}
+            # JSONB columns are not mutation-tracked by default; flag the
+            # attribute so the reassignment is actually written on commit.
+            flag_modified(event, "payload")
+
+
+async def prune_all_communities(db: AsyncSession, keep_seconds: int) -> int:
+    """Prune old events across every community in one pass. Returns the total
+    number of rows removed."""
+    cutoff = datetime.now(tz=UTC) - timedelta(seconds=keep_seconds)
+    result = cast(
+        CursorResult[Any], await db.execute(delete(Event).where(Event.created_at < cutoff))
+    )
+    return int(result.rowcount or 0)
+
+
+async def prune_old_events(db: AsyncSession, community_id: uuid.UUID, keep_seconds: int) -> int:
+    """Delete durable events older than the retention window. Reconnecting
+    clients re-fetch current state (message history, membership, etc.) via the
+    REST API, so old events are only a catch-up convenience — not a store of
+    record — and are bounded to limit how long any content lingers."""
+    cutoff = datetime.now(tz=UTC) - timedelta(seconds=keep_seconds)
+    result = cast(
+        CursorResult[Any],
+        await db.execute(
+            delete(Event).where(Event.community_id == community_id, Event.created_at < cutoff)
+        ),
+    )
+    return int(result.rowcount or 0)
 
 
 def event_envelope_from_row(event: Event) -> dict[str, Any]:

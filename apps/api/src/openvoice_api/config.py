@@ -45,6 +45,13 @@ class Settings(BaseSettings):
     auth_rate_limit_window_seconds: int = 300
     message_rate_limit_per_minute: int = 60
 
+    # Durable event log is a reconnect catch-up buffer, not a store of record:
+    # clients re-fetch current state via REST. Bounding its age limits how long
+    # any content lingers after the messages table itself has moved on. Set to
+    # 0 to disable pruning (not recommended in production).
+    event_retention_seconds: int = 14 * 24 * 60 * 60
+    event_retention_sweep_seconds: int = 60 * 60
+
     livekit_api_key: str
     livekit_api_secret: SecretStr
     # "origin" (recommended): clients connect to LiveKit through the reverse
@@ -54,6 +61,8 @@ class Settings(BaseSettings):
     livekit_ws_url: str = "origin"
     dev_voice_room: str = "dev-lobby"
     voice_token_ttl_seconds: int = 300
+    # How long a device proof-of-possession challenge stays valid (ADR-0008).
+    device_challenge_ttl_seconds: int = 300
 
     log_level: str = "INFO"
 

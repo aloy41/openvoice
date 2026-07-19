@@ -32,10 +32,16 @@ gate). Sections marked *(M3)* are gates for that milestone.
   shared-password login, which is refused in production mode at startup.
 - Per-device identity (ADR-0007): each browser holds a non-extractable
   ECDSA P-256 private key in IndexedDB (never transmitted); only the public
-  key is registered, and devices can be listed and revoked. Identity/
-  foundation only — not yet used to protect content (that is the MLS work).
+  key is registered, and devices can be listed and revoked.
   Storage caveat: clearing browser storage loses the key; the user registers
   a new device. Desktop will use OS secure storage.
+- Device-bound sessions (ADR-0008): device registration requires a signature
+  over a server challenge (proof of possession — a public key cannot be
+  registered without the private key), a session can be bound to a proven
+  device, and revoking a device revokes every session bound to it. This is
+  authentication hardening, not content protection.
+- Not yet used to protect content — automatic group keying (MLS) is designed
+  in ADR-0009 but not implemented; E2EE remains opt-in/passphrase today.
 - No security review or audit has occurred.
 
 ## Assets
@@ -67,9 +73,10 @@ gate). Sections marked *(M3)* are gates for that milestone.
 - **A4 Curious/compromised control plane** — **NOT mitigated today**; (M3)
   server never holds content keys.
 - **A5 Replay / removed-member access** — (M3) epoch rotation on membership
-  change per the audited implementation's guarantees.
-- **A6 Credential theft** — (M2) session revocation, device revocation,
-  hashed rotating refresh tokens, reuse detection.
+  change per the group-key protocol's guarantees.
+- **A6 Credential theft** — session revocation, device revocation, and
+  device-bound sessions (ADR-0008: revoking a device kills its sessions).
+  Hashed rotating refresh tokens / reuse detection remain future work.
 
 ## Explicit non-goals (never claim protection against)
 
@@ -86,7 +93,7 @@ gate). Sections marked *(M3)* are gates for that milestone.
 | --- | --- |
 | Voice E2EE requires a manually shared passphrase; no rotation on membership change, no per-device identity | M3 completion (MLS-based group keying) |
 | SFU/operator can access voice media when no passphrase is used | user opt-in today; default-on E2EE with MLS |
-| Text message content readable by the server | M3 (ciphertext envelopes) |
+| Text message content readable by the server when no channel passphrase is set (opt-in AES-GCM envelopes exist today; plaintext is the default) | default-on E2EE with MLS |
 | Dev login still enabled in dev stacks (shared password, no rate limit); production auth exists but the web client still uses the dev flow | M2 (client migration, then dev-auth removal) |
 | No account recovery — lost password = lost account (no email on file) | M2 later slice |
 | Argon2id parameters are library defaults, not yet reviewed for deployment class | pre-MVP security review |
@@ -116,6 +123,8 @@ respected). Trade-offs, handled deliberately:
 ## Standards and implementations to be used (do not substitute)
 
 WebRTC; Opus (RFC 6716); SFrame (RFC 9605) via LiveKit's maintained E2EE;
-MLS (RFC 9420) via an audited implementation for group key management;
-Web Crypto / OS secure storage for client key handling. **No custom
-primitives, ratchets, or wire formats — ever.**
+MLS (RFC 9420) via a widely-used, maintained implementation for group key
+management; Web Crypto / OS secure storage for client key handling. **No
+custom primitives, ratchets, or wire formats — ever.** No claim is made that
+any of these libraries, or this project's integration of them, has undergone
+an independent security audit.

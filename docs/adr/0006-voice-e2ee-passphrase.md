@@ -18,7 +18,7 @@ server-generated key and call the result E2EE.
 
 ## Decision
 
-### Mechanism (all audited/maintained code, zero custom crypto)
+### Mechanism (widely-used, maintained code, zero custom crypto)
 
 - LiveKit's `ExternalE2EEKeyProvider` + E2EE web worker
   (`livekit-client/e2ee-worker`): per-frame media encryption (AES-GCM via
@@ -60,7 +60,7 @@ server-generated key and call the result E2EE.
 
 ### Path to full M3
 
-MLS (RFC 9420) via an audited implementation for automatic group keying
+MLS (RFC 9420) via a widely-used, maintained implementation for automatic group keying
 with per-device credentials, epoch rotation on membership change, and
 verification states — replacing the passphrase for dynamic groups. Text
 message E2EE (ciphertext envelopes) ships alongside that key layer.

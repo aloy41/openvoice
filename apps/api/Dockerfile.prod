@@ -1,0 +1,43 @@
+# Production image for the Openvoice API: slim, no dev/test extras, non-root,
+# multi-worker uvicorn. Build from the apps/api context:
+#   docker build -f apps/api/Dockerfile.prod -t openvoice-api:prod apps/api
+FROM python:3.12-slim AS build
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+COPY . .
+
+# Install ONLY runtime deps (no ".[dev]"), pinned via constraints.txt, into a
+# virtualenv we copy into the final stage. pip is upgraded first (base image
+# pip carries advisories PYSEC-2026-2875/-2876).
+RUN python -m venv /venv && \
+    /venv/bin/pip install --upgrade "pip>=26.1" && \
+    PIP_CONSTRAINT=constraints.txt /venv/bin/pip install .
+
+FROM python:3.12-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/venv/bin:$PATH"
+
+# tini for correct signal handling / zombie reaping under multiple workers.
+RUN apt-get update && apt-get install -y --no-install-recommends tini && \
+    rm -rf /var/lib/apt/lists/* && \
+    useradd --create-home --uid 10001 app
+
+WORKDIR /app
+COPY --from=build /venv /venv
+COPY --from=build /app /app
+
+USER app
+EXPOSE 8000
+
+# Run DB migrations, then serve. UVICORN_WORKERS is set by the deployment
+# (default 2). The entrypoint keeps migrations and app start in one command so
+# a rolling deploy always migrates before serving.
+ENTRYPOINT ["tini", "--"]
+CMD ["sh", "-c", "alembic upgrade head && uvicorn openvoice_api.asgi:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS:-2}"]

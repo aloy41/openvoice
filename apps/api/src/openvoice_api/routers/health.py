@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy import text
 
 log = logging.getLogger("openvoice.health")
@@ -52,3 +53,12 @@ async def readyz(request: Request) -> JSONResponse:
         status_code=200 if ok else 503,
         content={"status": "ok" if ok else "degraded", "checks": checks},
     )
+
+
+@router.get("/metrics")
+async def metrics(request: Request) -> PlainTextResponse:
+    """Prometheus text-format metrics for operational monitoring. No auth: it
+    exposes only aggregate counters (no content, no identifiers), and should be
+    reached over the private network / behind the reverse proxy, not published."""
+    body = request.app.state.metrics.render(now=time.time())
+    return PlainTextResponse(body, media_type="text/plain; version=0.0.4")

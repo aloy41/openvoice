@@ -171,6 +171,25 @@ async def resolve_channel_capabilities(
     )
 
 
+async def viewable_channel_ids(db: AsyncSession, access: CommunityAccess) -> set[uuid.UUID]:
+    """The set of channel ids the member may VIEW. Used to filter realtime
+    events so a subscriber never receives content for channels they cannot
+    see (owners/administrators see everything)."""
+    channels = (
+        (await db.execute(select(Channel).where(Channel.community_id == access.community.id)))
+        .scalars()
+        .all()
+    )
+    result: set[uuid.UUID] = set()
+    for channel in channels:
+        if channel.kind == "category":
+            continue
+        caps = await resolve_channel_capabilities(db, access, channel)
+        if caps & Capability.VIEW_CHANNELS:
+            result.add(channel.id)
+    return result
+
+
 def record_audit(
     db: AsyncSession,
     *,

@@ -21,6 +21,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Metrics
+         * @description Prometheus text-format metrics for operational monitoring. No auth: it
+         *     exposes only aggregate counters (no content, no identifiers), and should be
+         *     reached over the private network / behind the reverse proxy, not published.
+         */
+        get: operations["metrics_api_metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/readyz": {
         parameters: {
             query?: never;
@@ -498,6 +520,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/devices/challenge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Device Challenge */
+        post: operations["device_challenge_api_v1_devices_challenge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/devices/{device_id}": {
         parameters: {
             query?: never;
@@ -510,6 +549,28 @@ export interface paths {
         post?: never;
         /** Revoke Device */
         delete: operations["revoke_device_api_v1_devices__device_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/{device_id}/bind-session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bind Session
+         * @description Bind the CURRENT cookie session to a proven device. Requires a fresh
+         *     proof of possession, so a stolen cookie alone cannot claim a device it
+         *     cannot sign for. After binding, revoking the device revokes this session.
+         */
+        post: operations["bind_session_api_v1_devices__device_id__bind_session_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -792,6 +853,13 @@ export interface components {
             token: string;
             user: components["schemas"]["openvoice_api__routers__dev_auth__UserOut"];
         };
+        /** DeviceChallengeOut */
+        DeviceChallengeOut: {
+            /** Challenge */
+            challenge: string;
+            /** Nonce */
+            nonce: string;
+        };
         /** DeviceListOut */
         DeviceListOut: {
             /** Devices */
@@ -816,8 +884,17 @@ export interface components {
             /** Name */
             name: string | null;
         };
+        /** DeviceProof */
+        DeviceProof: {
+            /** Challenge */
+            challenge: string;
+            /** Signature */
+            signature: string;
+        };
         /** DeviceRegister */
         DeviceRegister: {
+            /** Challenge */
+            challenge: string;
             /**
              * Key Type
              * @default ecdsa-p256
@@ -827,6 +904,8 @@ export interface components {
             name?: string | null;
             /** Public Key */
             public_key: string;
+            /** Signature */
+            signature: string;
         };
         /** DeviceRegistered */
         DeviceRegistered: {
@@ -1209,6 +1288,26 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    metrics_api_metrics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };
@@ -2322,6 +2421,26 @@ export interface operations {
             };
         };
     };
+    device_challenge_api_v1_devices_challenge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceChallengeOut"];
+                };
+            };
+        };
+    };
     revoke_device_api_v1_devices__device_id__delete: {
         parameters: {
             query?: never;
@@ -2332,6 +2451,43 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bind_session_api_v1_devices__device_id__bind_session_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceProof"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

@@ -8,21 +8,44 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from "react";
 
 import { api } from "./api/client";
-import { getLocalDeviceIdentity, rememberCurrentDeviceId } from "./crypto/device";
+import {
+  getLocalDeviceIdentity,
+  rememberCurrentDeviceId,
+  signChallengeNonce,
+} from "./crypto/device";
 
-/** Register this browser's device identity (public key only). Best-effort:
- * a failure never blocks sign-in — device identity is not yet load-bearing. */
+/**
+ * Register this browser's device identity with PROOF OF POSSESSION (ADR-0008):
+ * fetch a server challenge, sign its nonce with the device key, register the
+ * public key with that proof, then bind the current session to the device so
+ * revoking the device revokes the session. Best-effort: a failure never blocks
+ * sign-in — device binding is a hardening layer, not a login requirement.
+ */
 async function registerDevice(): Promise<void> {
   try {
     const identity = await getLocalDeviceIdentity();
+    const { data: challenge } = await api.POST("/api/v1/devices/challenge", {});
+    if (!challenge) return;
+    const signature = await signChallengeNonce(challenge.nonce);
     const { data } = await api.POST("/api/v1/devices", {
       body: {
         public_key: identity.publicKeyB64,
         key_type: identity.keyType,
         name: identity.name,
+        challenge: challenge.challenge,
+        signature,
       },
     });
-    if (data) await rememberCurrentDeviceId(data.device.id);
+    if (!data) return;
+    await rememberCurrentDeviceId(data.device.id);
+    // Bind this session to the proven device (fresh challenge each proof).
+    const { data: bindChallenge } = await api.POST("/api/v1/devices/challenge", {});
+    if (!bindChallenge) return;
+    const bindSignature = await signChallengeNonce(bindChallenge.nonce);
+    await api.POST("/api/v1/devices/{device_id}/bind-session", {
+      params: { path: { device_id: data.device.id } },
+      body: { challenge: bindChallenge.challenge, signature: bindSignature },
+    });
   } catch {
     // ignore — best effort
   }
