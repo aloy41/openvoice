@@ -1,6 +1,11 @@
 import { useState } from "react";
 
-import { useCreateInvite, useDeleteChannel, useRenameChannel } from "../queries";
+import {
+  useCreateInvite,
+  useDeleteChannel,
+  useRenameChannel,
+  useRenameCommunity,
+} from "../queries";
 import type { ChannelInfo, CommunityDetail } from "../queries";
 import type { UseVoiceRoom } from "../voice/useVoiceRoom";
 import { Avatar } from "./Avatar";
@@ -11,6 +16,7 @@ interface ChannelSidebarProps {
   loading: boolean;
   selectedChannelId: string | null;
   onSelectChannel: (id: string) => void;
+  unread: Set<string>;
   voice: UseVoiceRoom;
 }
 
@@ -19,11 +25,15 @@ export function ChannelSidebar({
   loading,
   selectedChannelId,
   onSelectChannel,
+  unread,
   voice,
 }: ChannelSidebarProps) {
   const createInvite = useCreateInvite(detail?.community.id ?? null);
   const renameChannel = useRenameChannel(detail?.community.id ?? null);
   const deleteChannel = useDeleteChannel(detail?.community.id ?? null);
+  const renameCommunity = useRenameCommunity(detail?.community.id ?? null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [communityNameDraft, setCommunityNameDraft] = useState("");
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -36,6 +46,7 @@ export function ChannelSidebar({
 
   const canInvite = detail?.my_capabilities.includes("CREATE_INVITE") ?? false;
   const canManage = detail?.my_capabilities.includes("MANAGE_CHANNELS") ?? false;
+  const canManageCommunity = detail?.my_capabilities.includes("MANAGE_COMMUNITY") ?? false;
 
   async function onInvite() {
     setInviteError(null);
@@ -115,7 +126,20 @@ export function ChannelSidebar({
             <span aria-hidden className="text-slate-500">
               {channel.kind === "voice" ? "🔊" : "#"}
             </span>
-            <span className="min-w-0 flex-1 truncate">{channel.name}</span>
+            <span
+              className={`min-w-0 flex-1 truncate ${
+                unread.has(channel.id) ? "font-semibold text-slate-100" : ""
+              }`}
+            >
+              {channel.name}
+            </span>
+            {unread.has(channel.id) && (
+              <span
+                aria-label="unread messages"
+                className="h-2 w-2 rounded-full bg-sky-400"
+                title="Unread messages"
+              />
+            )}
             {inThisCall && (
               <span aria-hidden className="h-2 w-2 rounded-full bg-emerald-400" title="Connected" />
             )}
@@ -192,16 +216,31 @@ export function ChannelSidebar({
         <h2 className="truncate text-sm font-semibold">
           {loading ? "Loading…" : (detail?.community.name ?? "")}
         </h2>
-        {canManage && detail && (
-          <button
-            onClick={() => setDialog({ mode: "channel", parentId: null })}
-            aria-label="Add channel"
-            title="Add channel"
-            className="rounded-md border border-slate-700 px-1.5 text-sm text-slate-300 hover:bg-slate-800"
-          >
-            ＋
-          </button>
-        )}
+        <div className="flex shrink-0 items-center gap-1">
+          {canManageCommunity && detail && (
+            <button
+              onClick={() => {
+                setCommunityNameDraft(detail.community.name);
+                setSettingsOpen(true);
+              }}
+              aria-label="Community settings"
+              title="Community settings"
+              className="rounded-md border border-slate-700 px-1.5 text-sm text-slate-300 hover:bg-slate-800"
+            >
+              ⚙
+            </button>
+          )}
+          {canManage && detail && (
+            <button
+              onClick={() => setDialog({ mode: "channel", parentId: null })}
+              aria-label="Add channel"
+              title="Add channel"
+              className="rounded-md border border-slate-700 px-1.5 text-sm text-slate-300 hover:bg-slate-800"
+            >
+              ＋
+            </button>
+          )}
+        </div>
       </div>
 
       <nav aria-label="Channels" className="min-h-0 flex-1 overflow-y-auto p-2">
@@ -290,6 +329,61 @@ export function ChannelSidebar({
             if (dialog.mode === "channel") onSelectChannel(id);
           }}
         />
+      )}
+
+      {settingsOpen && detail && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Community settings"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setSettingsOpen(false)}
+        >
+          <form
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={(e) => {
+              e.preventDefault();
+              const name = communityNameDraft.trim();
+              if (name && name !== detail.community.name) {
+                void renameCommunity.mutateAsync(name).catch(() => undefined);
+              }
+              setSettingsOpen(false);
+            }}
+            className="w-full max-w-sm space-y-4 rounded-lg border border-slate-700 bg-slate-900 p-6"
+          >
+            <h2 className="text-base font-semibold">Community settings</h2>
+            <div>
+              <label htmlFor="community-rename" className="block text-sm font-medium text-slate-300">
+                Community name
+              </label>
+              <input
+                id="community-rename"
+                autoFocus
+                value={communityNameDraft}
+                onChange={(e) => setCommunityNameDraft(e.target.value)}
+                maxLength={64}
+                minLength={1}
+                required
+                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(false)}
+                className="rounded-md border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="rounded-md bg-sky-700 px-3 py-2 text-sm font-medium text-white hover:bg-sky-800"
+              >
+                Save
+              </button>
+            </div>
+          </form>
+        </div>
       )}
     </div>
   );

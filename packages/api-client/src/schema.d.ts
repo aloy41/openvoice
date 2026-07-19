@@ -248,7 +248,8 @@ export interface paths {
         delete: operations["delete_community_api_v1_communities__community_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** Update Community */
+        patch: operations["update_community_api_v1_communities__community_id__patch"];
         trace?: never;
     };
     "/api/v1/communities/{community_id}/audit": {
@@ -770,6 +771,11 @@ export interface components {
              * Format: uuid
              */
             owner_id: string;
+        };
+        /** CommunityPatch */
+        CommunityPatch: {
+            /** Name */
+            name: string;
         };
         /** DevSessionRequest */
         DevSessionRequest: {
@@ -1696,6 +1702,41 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_community_api_v1_communities__community_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                community_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommunityPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityOut"];
                 };
             };
             /** @description Validation Error */

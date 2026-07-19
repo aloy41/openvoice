@@ -307,6 +307,23 @@ export function useUnbanMember(communityId: string | null) {
   });
 }
 
+export function useRenameCommunity(communityId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (name: string) => {
+      const { error } = await api.PATCH("/api/v1/communities/{community_id}", {
+        params: { path: { community_id: communityId! } },
+        body: { name },
+      });
+      if (error) throw new Error("Could not rename the community.");
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["community", communityId] });
+      void qc.invalidateQueries({ queryKey: ["communities"] });
+    },
+  });
+}
+
 export function useCreateChannel(communityId: string | null) {
   const qc = useQueryClient();
   return useMutation({

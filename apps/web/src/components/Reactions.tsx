@@ -4,7 +4,7 @@ import type { MessageInfo } from "../queries";
 import { useToggleReaction } from "../queries";
 import { useSession } from "../session";
 
-const QUICK_EMOJI = ["👍", "❤️", "😂", "🎉", "🔥", "👀", "😮", "😢", "🙏", "✅"];
+const QUICK_EMOJI = ["👍", "❤️", "😂", "🎉", "🔥", "👀", "😮", "😢", "🙏", "✅", "💯", "👏"];
 
 type Reaction = NonNullable<MessageInfo["reactions"]>[number];
 
