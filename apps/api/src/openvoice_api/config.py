@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     # feature). Counted per client address + username in Redis.
     auth_rate_limit_attempts: int = 10
     auth_rate_limit_window_seconds: int = 300
+    message_rate_limit_per_minute: int = 60
 
     livekit_api_key: str
     livekit_api_secret: SecretStr

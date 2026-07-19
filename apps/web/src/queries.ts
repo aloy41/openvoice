@@ -66,6 +66,68 @@ export function useRedeemInvite() {
   });
 }
 
+export type MessageInfo = components["schemas"]["MessageOut"];
+
+export function useMessages(channelId: string | null) {
+  return useQuery({
+    queryKey: ["messages", channelId],
+    enabled: channelId !== null,
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/channels/{channel_id}/messages", {
+        params: { path: { channel_id: channelId! } },
+      });
+      if (error || !data) throw new Error("failed to load messages");
+      return data.messages;
+    },
+  });
+}
+
+export function useSendMessage(channelId: string | null) {
+  return useMutation({
+    mutationFn: async (content: string) => {
+      const { data, error } = await api.POST("/api/v1/channels/{channel_id}/messages", {
+        params: { path: { channel_id: channelId! } },
+        body: { content },
+      });
+      if (error || !data) {
+        const code = (error as { code?: string } | null)?.code;
+        throw new Error(
+          code === "rate_limited"
+            ? "You are sending messages too fast."
+            : code === "missing_permission"
+              ? "You don't have permission to send messages here."
+              : "The message could not be sent.",
+        );
+      }
+      return data;
+    },
+  });
+}
+
+export function useEditMessage() {
+  return useMutation({
+    mutationFn: async (args: { messageId: string; content: string }) => {
+      const { data, error } = await api.PATCH("/api/v1/messages/{message_id}", {
+        params: { path: { message_id: args.messageId } },
+        body: { content: args.content },
+      });
+      if (error || !data) throw new Error("The edit could not be saved.");
+      return data;
+    },
+  });
+}
+
+export function useDeleteMessage() {
+  return useMutation({
+    mutationFn: async (messageId: string) => {
+      const { error } = await api.DELETE("/api/v1/messages/{message_id}", {
+        params: { path: { message_id: messageId } },
+      });
+      if (error) throw new Error("The message could not be deleted.");
+    },
+  });
+}
+
 export function useCreateInvite(communityId: string | null) {
   return useMutation({
     mutationFn: async () => {
