@@ -134,6 +134,25 @@ create community → invite → guest joins → authorized voice channel):
 workspace, and in-call screens (one new contrast violation caught and
 fixed). Web unit tests 17/17, lint/types/build clean.
 
+### Members panel + moderation UI + event-stream security (2026-07-19)
+
+- **Security finding fixed**: a kicked/banned member's already-open
+  WebSocket kept receiving community events (including message contents)
+  until reconnect. The server now watches for `membership.removed` events
+  targeting the connection's user and terminates the stream immediately
+  with an explicit notice; a fresh subscribe is refused. Covered by a new
+  WebSocket API test (single-TestClient pattern — async pools must not
+  cross event loops; NullPool in test mode).
+- **Protocol bug fixed by the new test**: the event wrapper spread the
+  envelope into itself, letting the envelope's `type` clobber the frame
+  type; frames now nest the envelope under `event`.
+- membership.joined/removed/unbanned appended to the durable event log;
+  members panel (capability-gated kick/ban/unban with two-step confirm,
+  owner badge, staff-only bans list) updates live on those events; the
+  kicked user's UI bounces to Home with an honest notice.
+- Verified: 80/80 API tests, e2e 9/9 including the new two-sided
+  moderation flow, 17/17 unit tests, lint/types/build clean.
+
 **Not yet verified** (open Milestone 1 exit items):
 - TURN over **TLS** for the most restrictive networks — requires a domain and
   real certificate; part of the hardened production deployment (M4).

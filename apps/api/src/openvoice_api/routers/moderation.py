@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from ..authz import load_access, not_found, record_audit
 from ..deps import authenticate, authenticate_unsafe
+from ..events import append_event, publish_event
 from ..models import Ban, Membership, User
 from ..permissions import Capability
 
@@ -132,7 +133,11 @@ async def kick_member(
             target_id=user_id,
         )
         await db.delete(membership)
+        envelope = await append_event(
+            db, community_id, "membership.removed", {"user_id": str(user_id), "kind": "kicked"}
+        )
         await db.commit()
+    await publish_event(request.app.state.redis, envelope)
     return {"status": "kicked"}
 
 
@@ -186,7 +191,14 @@ async def ban_member(community_id: uuid.UUID, body: BanCreate, request: Request)
             target_id=body.user_id,
             meta={"expires_at": expires_at.isoformat() if expires_at else None},
         )
+        envelope = await append_event(
+            db,
+            community_id,
+            "membership.removed",
+            {"user_id": str(body.user_id), "kind": "banned"},
+        )
         await db.commit()
+        await publish_event(request.app.state.redis, envelope)
         return BanOut(
             user_id=target.id,
             username=target.username,
@@ -248,7 +260,11 @@ async def unban_member(
             target_id=user_id,
         )
         await db.delete(ban)
+        envelope = await append_event(
+            db, community_id, "membership.unbanned", {"user_id": str(user_id)}
+        )
         await db.commit()
+    await publish_event(request.app.state.redis, envelope)
     return {"status": "unbanned"}
 
 
