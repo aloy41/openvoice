@@ -1,0 +1,164 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  # Fake credentials for CI only — conspicuously not secrets.
+  CI_SECRET_KEY: ci-only-secret-key-0123456789abcdef0123456789abcdef
+  CI_DEV_PASSWORD: ci-only-dev-password
+  CI_LIVEKIT_SECRET: ci-only-livekit-secret-0123456789abcdef
+
+jobs:
+  api:
+    name: API — lint, types, tests (PostgreSQL + Redis)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: openvoice
+          POSTGRES_PASSWORD: ci-postgres
+          POSTGRES_DB: openvoice_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U openvoice" --health-interval 5s
+          --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s
+          --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        working-directory: apps/api
+        run: PIP_CONSTRAINT=constraints.txt pip install -e ".[dev]" pip-audit
+      - name: Ruff lint
+        working-directory: apps/api
+        run: ruff check .
+      - name: Ruff format
+        working-directory: apps/api
+        run: ruff format --check .
+      - name: Mypy (strict)
+        working-directory: apps/api
+        run: mypy
+      - name: Pytest
+        working-directory: apps/api
+        env:
+          OPENVOICE_TEST_DATABASE_URL: postgresql+asyncpg://openvoice:ci-postgres@localhost:5432/openvoice_test
+          OPENVOICE_REDIS_URL: redis://localhost:6379/0
+        run: pytest -v
+      - name: Dependency audit (pip-audit)
+        working-directory: apps/api
+        run: pip-audit --skip-editable
+
+  contract:
+    name: OpenAPI contract & generated client drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install API
+        working-directory: apps/api
+        run: PIP_CONSTRAINT=constraints.txt pip install -e .
+      - name: Export schema
+        working-directory: apps/api
+        run: python -m openvoice_api.export_openapi > openapi.json
+      - name: Install JS workspaces
+        run: npm ci
+      - name: Regenerate TS client
+        run: npm run generate -w packages/api-client
+      - name: Fail on drift
+        run: git diff --exit-code -- apps/api/openapi.json packages/api-client/src/schema.d.ts
+
+  web:
+    name: Web — lint, types, tests, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run lint -w apps/web
+      - run: npm run typecheck -w apps/web
+      - run: npm run test -w apps/web
+      - run: npm run build -w apps/web
+      - name: Dependency audit (npm)
+        run: npm audit --audit-level=high
+
+  api-image:
+    name: API — production image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t openvoice-api:ci apps/api
+
+  secrets:
+    name: Secret scanning (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  e2e:
+    name: E2E — two-client voice smoke (full stack)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Create .env for the stack
+        run: |
+          cat > .env <<EOF
+          OPENVOICE_ENVIRONMENT=development
+          OPENVOICE_SECRET_KEY=${CI_SECRET_KEY}
+          OPENVOICE_DEV_AUTH_ENABLED=true
+          OPENVOICE_DEV_AUTH_PASSWORD=${CI_DEV_PASSWORD}
+          POSTGRES_PASSWORD=ci-postgres
+          LIVEKIT_API_KEY=devkey
+          LIVEKIT_API_SECRET=${CI_LIVEKIT_SECRET}
+          OPENVOICE_LIVEKIT_WS_URL=ws://localhost:7880
+          EOF
+      - name: Start stack
+        run: docker compose -f docker-compose.dev.yml up -d --build
+      - name: Wait for readiness
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/api/readyz > /dev/null 2>&1; then exit 0; fi
+            sleep 3
+          done
+          echo "stack did not become ready"; docker compose -f docker-compose.dev.yml logs; exit 1
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Run smoke test
+        env:
+          OPENVOICE_DEV_AUTH_PASSWORD: ${{ env.CI_DEV_PASSWORD }}
+        run: npm run test:e2e
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.dev.yml logs
+      - name: Teardown
+        if: always()
+        run: docker compose -f docker-compose.dev.yml down -v

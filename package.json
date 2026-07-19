@@ -1,0 +1,15 @@
+{
+  "name": "openvoice",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "packages/api-client"
+  ],
+  "scripts": {
+    "generate": "npm run generate -w packages/api-client",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}

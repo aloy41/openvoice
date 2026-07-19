@@ -1,0 +1,7 @@
+# Normalize all text to LF so generated artifacts (openapi.json, schema.d.ts,
+# constraints.txt) are byte-identical across Windows/macOS/Linux and CI's
+# contract-drift check stays meaningful.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary

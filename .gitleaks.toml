@@ -1,0 +1,17 @@
+# Secret-scanning configuration (gitleaks).
+# Keep allowlist rules NARROW and documented. Real secrets must never be
+# committed anywhere, including examples and fixtures.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documented placeholder values only"
+regexes = [
+  # Placeholder values in .env.example / docs that are conspicuously fake.
+  '''CHANGE_ME[A-Za-z0-9_]*''',
+]
+paths = [
+  # Test fixtures may contain structurally-valid-but-fake JWTs asserted on by
+  # token-grant tests. Review any addition to this list carefully.
+  '''apps/api/tests/''',
+]
