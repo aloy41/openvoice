@@ -38,6 +38,11 @@ test("messages, edits, and deletes propagate live between two clients", async ({
   await joinCommunityWithCode(bob, code, communityName);
   await openTextChannel(bob);
 
+  // Regression guard: idle past any server-side socket timeout before the
+  // first send — a pub/sub listener killed by an idle timeout once made live
+  // delivery silently fail at human pace while fast tests passed.
+  await alice.waitForTimeout(3500);
+
   // A sends; B sees it live (no reload) with the author name.
   await alice.getByLabel(/Message #/).fill("hello from alice");
   await alice.getByRole("button", { name: "Send" }).click();

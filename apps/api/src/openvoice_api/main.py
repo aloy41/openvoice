@@ -48,6 +48,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     redis_client: aioredis.Redis = aioredis.from_url(  # type: ignore[no-untyped-call]
         settings.redis_url, socket_connect_timeout=2, socket_timeout=2
     )
+    # Separate client for pub/sub subscribers: a socket_timeout would kill a
+    # blocked LISTEN after 2 idle seconds — the listener must wait forever.
+    redis_pubsub_client: aioredis.Redis = aioredis.from_url(  # type: ignore[no-untyped-call]
+        settings.redis_url, socket_connect_timeout=2
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -63,6 +68,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         yield
         await engine.dispose()
         await redis_client.aclose()
+        await redis_pubsub_client.aclose()
 
     app = FastAPI(
         title="Openvoice API",
@@ -76,6 +82,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.engine = engine
     app.state.sessionmaker = sessionmaker
     app.state.redis = redis_client
+    app.state.redis_pubsub = redis_pubsub_client
 
     @app.middleware("http")
     async def request_context(

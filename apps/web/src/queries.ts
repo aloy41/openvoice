@@ -83,7 +83,17 @@ export function useMessages(channelId: string | null) {
 }
 
 export function useSendMessage(channelId: string | null) {
+  const qc = useQueryClient();
   return useMutation({
+    // The sender sees their own message immediately from the POST response;
+    // the WS event for it deduplicates by id.
+    onSuccess: (message) => {
+      qc.setQueryData<MessageInfo[]>(["messages", message.channel_id], (old) => {
+        if (!old) return old;
+        if (old.some((m) => m.id === message.id)) return old;
+        return [...old, message];
+      });
+    },
     mutationFn: async (content: string) => {
       const { data, error } = await api.POST("/api/v1/channels/{channel_id}/messages", {
         params: { path: { channel_id: channelId! } },

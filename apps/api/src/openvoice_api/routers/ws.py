@@ -67,7 +67,10 @@ async def events_ws(websocket: WebSocket) -> None:
         return
     await websocket.accept()
 
-    redis = websocket.app.state.redis
+    # Pub/sub MUST use the timeout-free client: the general-purpose client's
+    # socket_timeout would silently kill an idle listener after 2 seconds
+    # (symptom: live updates stop until the client resubscribes).
+    redis = websocket.app.state.redis_pubsub
     listener: asyncio.Task[None] | None = None
 
     async def stop_listener() -> None:
