@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useCreateInvite, useDeleteChannel, useRenameChannel } from "../queries";
 import type { ChannelInfo, CommunityDetail } from "../queries";
 import type { UseVoiceRoom } from "../voice/useVoiceRoom";
+import { Avatar } from "./Avatar";
 import { CreateChannelDialog } from "./CreateChannelDialog";
 
 interface ChannelSidebarProps {
@@ -161,6 +162,25 @@ export function ChannelSidebar({
               Cancel
             </button>
           </div>
+        )}
+        {/* Live voice participants nested under the voice channel you're in. */}
+        {inThisCall && voice.participants.length > 0 && (
+          <ul aria-label={`In ${channel.name}`} className="ml-6 mt-0.5 space-y-0.5">
+            {voice.participants.map((p) => (
+              <li key={p.identity} className="flex items-center gap-2 px-2 py-0.5">
+                <Avatar name={p.name} size="sm" speaking={p.speaking} />
+                <span className="min-w-0 flex-1 truncate text-xs text-slate-300">
+                  {p.name}
+                  {p.isLocal && <span className="text-slate-400"> (you)</span>}
+                </span>
+                {p.micMuted && (
+                  <span aria-label="muted" title="muted" className="text-xs text-slate-500">
+                    🔇
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
         )}
       </li>
     );

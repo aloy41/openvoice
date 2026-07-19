@@ -36,7 +36,8 @@ export function Avatar({
       className={`inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white ${SIZES[size]} ${
         speaking ? "ring-2 ring-emerald-400" : ""
       }`}
-      style={{ backgroundColor: `hsl(${hue} 55% 40%)` }}
+      // Fixed low lightness so white text meets WCAG AA contrast for every hue.
+      style={{ backgroundColor: `hsl(${hue} 45% 28%)` }}
     >
       {initials(name)}
     </span>

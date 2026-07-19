@@ -2,7 +2,6 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { useCreateCommunity, useRedeemInvite } from "../queries";
-import { EncryptionNotice } from "./EncryptionNotice";
 
 interface HomePaneProps {
   onCreated: (communityId: string) => void;
@@ -43,7 +42,6 @@ export function HomePane({ onCreated, onJoined }: HomePaneProps) {
 
   return (
     <div className="mx-auto max-w-md space-y-6">
-      <EncryptionNotice />
       <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
         <h2 className="text-base font-semibold">Create a community</h2>
         <form onSubmit={onCreate} className="mt-4 space-y-4" aria-label="Create a community">

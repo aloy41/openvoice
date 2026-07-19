@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthScreen } from "./components/AuthScreen";
 import { CommunityApp } from "./components/CommunityApp";
 import { DevicesModal } from "./components/DevicesModal";
+import { EncryptionDialog } from "./components/EncryptionDialog";
 import { SessionProvider, useSession } from "./session";
 
 const queryClient = new QueryClient({
@@ -15,6 +16,7 @@ const queryClient = new QueryClient({
 function Shell() {
   const { status, user, signOut } = useSession();
   const [showDevices, setShowDevices] = useState(false);
+  const [showEncryption, setShowEncryption] = useState(false);
   return (
     <div className="flex h-screen flex-col bg-slate-950 text-slate-100">
       <header className="shrink-0 border-b border-slate-800 px-6 py-3">
@@ -25,6 +27,13 @@ function Shell() {
               <span className="text-slate-400">
                 Signed in as <span className="text-slate-200">{user.display_name}</span>
               </span>
+              <button
+                onClick={() => setShowEncryption(true)}
+                title="About encryption"
+                className="rounded-md border border-slate-700 px-3 py-1.5 hover:bg-slate-800"
+              >
+                🔒 Encryption
+              </button>
               <button
                 onClick={() => setShowDevices(true)}
                 className="rounded-md border border-slate-700 px-3 py-1.5 hover:bg-slate-800"
@@ -42,6 +51,7 @@ function Shell() {
         </div>
       </header>
       {showDevices && <DevicesModal onClose={() => setShowDevices(false)} />}
+      {showEncryption && <EncryptionDialog onClose={() => setShowEncryption(false)} />}
       <div className="min-h-0 flex-1">
         {status === "loading" && (
           <p role="status" className="px-6 py-8 text-sm text-slate-400">

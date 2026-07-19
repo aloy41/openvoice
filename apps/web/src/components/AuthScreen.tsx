@@ -2,7 +2,6 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { useSession } from "../session";
-import { EncryptionNotice } from "./EncryptionNotice";
 
 type Mode = "signin" | "signup";
 
@@ -31,7 +30,6 @@ export function AuthScreen() {
 
   return (
     <div className="mx-auto max-w-md space-y-6">
-      <EncryptionNotice />
       <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
         <h2 className="text-base font-semibold">
           {mode === "signin" ? "Sign in" : "Create your account"}

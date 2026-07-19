@@ -27,8 +27,9 @@ test("invite flow: two clients meet in an authorized voice channel", async ({ br
     communityName,
   );
 
-  // The honest encryption state is visible in the workspace.
-  await expect(alice.getByRole("note", { name: "Encryption status" })).toContainText(
+  // The honest encryption state is visible in the call workspace (this call
+  // has no passphrase, so it is transport-encrypted only).
+  await expect(alice.getByRole("note", { name: "Call encryption status" })).toContainText(
     "not end-to-end encrypted",
   );
 
@@ -37,6 +38,11 @@ test("invite flow: two clients meet in an authorized voice channel", async ({ br
   const listA = alice.getByRole("list", { name: "Participants" });
   await expect(listA).toContainText(aliceName, { timeout: 15_000 });
   await expect(listA).toContainText(bobName, { timeout: 15_000 });
+
+  // Joining shows participants nested under the voice channel in the sidebar.
+  const sidebarVoice = alice.getByRole("list", { name: "In General" });
+  await expect(sidebarVoice).toContainText(aliceName, { timeout: 15_000 });
+  await expect(sidebarVoice).toContainText(bobName, { timeout: 15_000 });
 
   const listB = bob.getByRole("list", { name: "Participants" });
   await expect(listB).toContainText(aliceName, { timeout: 15_000 });
