@@ -151,7 +151,9 @@ export function useVoiceRoom(sessionToken: string): UseVoiceRoom {
       }
 
       const room = new Room({
-        audioCaptureDefaults: micDeviceId ? { deviceId: micDeviceId } : undefined,
+        // exact: a bare deviceId is only a preference and the browser may
+        // substitute a different device (e.g. a vendor's virtual mic).
+        audioCaptureDefaults: micDeviceId ? { deviceId: { exact: micDeviceId } } : undefined,
         audioOutput: outputDeviceId ? { deviceId: outputDeviceId } : undefined,
       });
       roomRef.current = room;
@@ -275,7 +277,9 @@ export function useVoiceRoom(sessionToken: string): UseVoiceRoom {
     const room = roomRef.current;
     if (!room) return;
     try {
-      await room.switchActiveDevice("audioinput", deviceId);
+      // exact=true: a bare deviceId is only a preference and the browser may
+      // silently keep capturing a different device (e.g. a virtual one).
+      await room.switchActiveDevice("audioinput", deviceId, true);
     } catch (e) {
       setError(describeMediaError(e));
     }
@@ -285,7 +289,7 @@ export function useVoiceRoom(sessionToken: string): UseVoiceRoom {
     const room = roomRef.current;
     if (!room) return;
     try {
-      await room.switchActiveDevice("audiooutput", deviceId);
+      await room.switchActiveDevice("audiooutput", deviceId, true);
     } catch {
       setError({
         code: "output_switch_failed",
