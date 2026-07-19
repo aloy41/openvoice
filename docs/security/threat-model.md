@@ -94,6 +94,25 @@ gate). Sections marked *(M3)* are gates for that milestone.
 | Rate limiting covers auth endpoints only | M2/M4 |
 | Compose dev stack has no TLS | M4 hardened reference deployment |
 
+## Inline media embeds (chat)
+
+GIF/image links in messages render as client-side `<img>` elements — the
+server never fetches the URL, so there is **no SSRF surface** (the master
+prompt's "no server-side link fetching until SSRF is designed" rule is
+respected). Trade-offs, handled deliberately:
+
+- Loading a remote image reveals the viewer's IP to the image host. We
+  therefore auto-embed only **https image files and an allowlist of known GIF
+  hosts** (Giphy/Tenor media), never arbitrary hosts, and always with
+  `referrerPolicy="no-referrer"`. Non-`https` and `javascript:`/`data:` URLs
+  are refused.
+- Embedded media is fetched by URL and is **not** end-to-end encrypted even
+  when the surrounding message is (the ciphertext hides the URL from the
+  server, but the third-party host still sees each viewer's IP). This is an
+  inherent property of URL embeds, documented so no false claim is made.
+- Production deployments must include the allowlisted media hosts in the CSP
+  `img-src`; scripts/objects stay disallowed.
+
 ## Standards and implementations to be used (do not substitute)
 
 WebRTC; Opus (RFC 6716); SFrame (RFC 9605) via LiveKit's maintained E2EE;

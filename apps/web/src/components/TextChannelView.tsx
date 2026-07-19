@@ -2,12 +2,34 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
 import { decryptMessage, encryptMessage, MESSAGE_SCHEME } from "../crypto/envelope";
+import { extractEmbeds, isOnlyEmbed } from "../media";
 import type { ChannelInfo, MessageInfo } from "../queries";
 import { useDeleteMessage, useEditMessage, useMessages, useSendMessage } from "../queries";
 import { useSession } from "../session";
 import { clockTime, relativeTime } from "../time";
 import { Avatar } from "./Avatar";
 import { RichText } from "./RichText";
+
+function MediaEmbeds({ text }: { text: string }) {
+  const embeds = extractEmbeds(text);
+  if (embeds.length === 0) return null;
+  return (
+    <div className="mt-1 flex flex-wrap gap-2">
+      {embeds.map((src) => (
+        <a key={src} href={src} target="_blank" rel="noreferrer noopener" className="block w-fit">
+          <img
+            src={src}
+            alt="Shared media"
+            loading="lazy"
+            decoding="async"
+            referrerPolicy="no-referrer"
+            className="max-h-64 max-w-xs rounded-md border border-slate-800 bg-slate-950"
+          />
+        </a>
+      ))}
+    </div>
+  );
+}
 
 interface TextChannelViewProps {
   channel: ChannelInfo;
@@ -219,14 +241,21 @@ export function TextChannelView({ channel, passphrase, onPassphraseChange }: Tex
                     <p className="text-sm italic text-slate-500">message deleted</p>
                   ) : (
                     <div className="flex items-start gap-2">
-                      <p
-                        className={`min-w-0 flex-1 whitespace-pre-wrap break-words text-sm ${
-                          shown.locked ? "italic text-slate-500" : "text-slate-100"
-                        }`}
-                      >
-                        {shown.locked ? shown.text : <RichText text={shown.text} />}
-                        {m.edited_at && <span className="ml-1 text-xs text-slate-500">(edited)</span>}
-                      </p>
+                      <div className="min-w-0 flex-1">
+                        {!(!shown.locked && isOnlyEmbed(shown.text)) && (
+                          <p
+                            className={`whitespace-pre-wrap break-words text-sm ${
+                              shown.locked ? "italic text-slate-500" : "text-slate-100"
+                            }`}
+                          >
+                            {shown.locked ? shown.text : <RichText text={shown.text} />}
+                            {m.edited_at && (
+                              <span className="ml-1 text-xs text-slate-500">(edited)</span>
+                            )}
+                          </p>
+                        )}
+                        {!shown.locked && <MediaEmbeds text={shown.text} />}
+                      </div>
                       <div className="invisible flex shrink-0 gap-1 group-hover:visible group-focus-within:visible">
                         {m.author_id === user?.id && !shown.locked && (
                           <button
