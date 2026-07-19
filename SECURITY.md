@@ -2,15 +2,18 @@
 
 ## Current security status (be honest with yourself before deploying)
 
-This project is at Milestone 0/1. It has **no production authentication, no
-end-to-end encryption, and has not received any security review or audit**.
-Do not deploy it for real communities or sensitive communication.
+This project has **not received any independent security review or audit**.
+Do not deploy it for real communities or sensitive communication without one.
 
-Voice media is protected in transit by WebRTC transport encryption
-(DTLS-SRTP) between each client and the LiveKit SFU. The SFU and the server
-operator can access routed media. Application-level E2EE is planned for
-Milestone 3 and will only be claimed after it is implemented with audited
-components and independently verified. See `docs/security/threat-model.md`.
+Optional application-level E2EE is available for both voice (passphrase-keyed
+LiveKit frame encryption) and text (client-side AES-GCM message envelopes),
+and the UI always shows whether a given channel or call is end-to-end
+encrypted or transport-encrypted only. These features are built on
+widely-used, maintained cryptographic libraries (Web Crypto, LiveKit's
+frame encryption) with no custom cryptography, but the integration itself has
+not been independently reviewed. Without a passphrase, voice and text are
+protected only by transport encryption (DTLS-SRTP / TLS), which the SFU and
+the server operator can access. See `docs/security/threat-model.md`.
 
 ## Reporting a vulnerability
 

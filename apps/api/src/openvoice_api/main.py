@@ -7,6 +7,7 @@ disposes resources.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import time
 import uuid
@@ -22,6 +23,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import Environment, Settings
 from .logging_setup import configure_logging, request_id_var
+from .metrics import new_metrics
 from .routers import (
     auth,
     communities,
@@ -63,8 +65,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings.redis_url, socket_connect_timeout=2
     )
 
+    async def retention_sweep() -> None:
+        """Periodically prune the durable event log so deleted/old content does
+        not linger indefinitely. Best-effort: a failed sweep is logged and
+        retried next interval, never fatal."""
+        import asyncio
+
+        from .events import prune_all_communities
+
+        interval = settings.event_retention_sweep_seconds
+        keep = settings.event_retention_seconds
+        if keep <= 0 or interval <= 0:
+            return
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                async with sessionmaker() as db:
+                    removed = await prune_all_communities(db, keep)
+                    await db.commit()
+                if removed:
+                    log.info(
+                        "event retention sweep",
+                        extra={"extra_fields": {"removed": removed}},
+                    )
+            except Exception:
+                log.warning("event retention sweep failed; will retry")
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        import asyncio
+
         log.info(
             "api starting",
             extra={
@@ -74,10 +104,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 }
             },
         )
-        yield
-        await engine.dispose()
-        await redis_client.aclose()
-        await redis_pubsub_client.aclose()
+        sweep_task = asyncio.create_task(retention_sweep())
+        try:
+            yield
+        finally:
+            sweep_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await sweep_task
+            await engine.dispose()
+            await redis_client.aclose()
+            await redis_pubsub_client.aclose()
 
     app = FastAPI(
         title="Openvoice API",
@@ -92,6 +128,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.sessionmaker = sessionmaker
     app.state.redis = redis_client
     app.state.redis_pubsub = redis_pubsub_client
+    app.state.metrics = new_metrics()
 
     @app.middleware("http")
     async def request_context(
@@ -116,6 +153,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 },
             )
         duration_ms = round((time.perf_counter() - start) * 1000, 1)
+        app.state.metrics.observe_request(request.method, response.status_code, duration_ms)
         response.headers["x-request-id"] = req_id
         # Double-submit CSRF: every browser ends up with a CSRF cookie it can
         # echo in the x-csrf-token header (validated in deps.require_csrf).

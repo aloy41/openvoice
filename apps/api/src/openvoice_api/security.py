@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import secrets
 import uuid
@@ -21,6 +22,7 @@ from itsdangerous import URLSafeTimedSerializer
 from .config import Settings
 
 _SALT = "openvoice-dev-session-v1"
+_DEVICE_CHALLENGE_SALT = "openvoice-device-challenge-v1"
 
 _password_hasher = PasswordHasher()
 
@@ -55,6 +57,32 @@ def new_csrf_token() -> str:
 
 def _serializer(settings: Settings) -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(settings.secret_key.get_secret_value(), salt=_SALT)
+
+
+def _device_challenge_serializer(settings: Settings) -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(
+        settings.secret_key.get_secret_value(), salt=_DEVICE_CHALLENGE_SALT
+    )
+
+
+def new_device_nonce() -> str:
+    """A fresh random nonce (base64) the client signs to prove key possession."""
+    return base64.b64encode(secrets.token_bytes(32)).decode()
+
+
+def issue_device_challenge(settings: Settings, nonce: str) -> str:
+    """Wrap a nonce in a signed, time-limited token so the challenge is
+    stateless — no server-side nonce store to track or expire."""
+    return _device_challenge_serializer(settings).dumps({"nonce": nonce})
+
+
+def verify_device_challenge(settings: Settings, token: str, max_age_seconds: int) -> str:
+    """Return the nonce from a valid, unexpired challenge token.
+
+    Raises itsdangerous.SignatureExpired / BadSignature on failure; callers map
+    those to a 400/401 without leaking details."""
+    payload = _device_challenge_serializer(settings).loads(token, max_age=max_age_seconds)
+    return str(payload["nonce"])
 
 
 def issue_dev_session_token(settings: Settings, user_id: uuid.UUID) -> str:

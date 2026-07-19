@@ -488,6 +488,24 @@
         "title": "DevSessionResponse",
         "type": "object"
       },
+      "DeviceChallengeOut": {
+        "properties": {
+          "challenge": {
+            "title": "Challenge",
+            "type": "string"
+          },
+          "nonce": {
+            "title": "Nonce",
+            "type": "string"
+          }
+        },
+        "required": [
+          "challenge",
+          "nonce"
+        ],
+        "title": "DeviceChallengeOut",
+        "type": "object"
+      },
       "DeviceListOut": {
         "properties": {
           "devices": {
@@ -554,8 +572,36 @@
         "title": "DeviceOut",
         "type": "object"
       },
+      "DeviceProof": {
+        "properties": {
+          "challenge": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Challenge",
+            "type": "string"
+          },
+          "signature": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Signature",
+            "type": "string"
+          }
+        },
+        "required": [
+          "challenge",
+          "signature"
+        ],
+        "title": "DeviceProof",
+        "type": "object"
+      },
       "DeviceRegister": {
         "properties": {
+          "challenge": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Challenge",
+            "type": "string"
+          },
           "key_type": {
             "default": "ecdsa-p256",
             "maxLength": 32,
@@ -580,10 +626,18 @@
             "minLength": 1,
             "title": "Public Key",
             "type": "string"
+          },
+          "signature": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Signature",
+            "type": "string"
           }
         },
         "required": [
-          "public_key"
+          "public_key",
+          "challenge",
+          "signature"
         ],
         "title": "DeviceRegister",
         "type": "object"
@@ -1604,6 +1658,26 @@
           }
         },
         "summary": "Healthz",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/metrics": {
+      "get": {
+        "description": "Prometheus text-format metrics for operational monitoring. No auth: it\nexposes only aggregate counters (no content, no identifiers), and should be\nreached over the private network / behind the reverse proxy, not published.",
+        "operationId": "metrics_api_metrics_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Metrics",
         "tags": [
           "health"
         ]
@@ -3178,6 +3252,27 @@
         ]
       }
     },
+    "/api/v1/devices/challenge": {
+      "post": {
+        "operationId": "device_challenge_api_v1_devices_challenge_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceChallengeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Device Challenge",
+        "tags": [
+          "devices"
+        ]
+      }
+    },
     "/api/v1/devices/{device_id}": {
       "delete": {
         "operationId": "revoke_device_api_v1_devices__device_id__delete",
@@ -3220,6 +3315,64 @@
           }
         },
         "summary": "Revoke Device",
+        "tags": [
+          "devices"
+        ]
+      }
+    },
+    "/api/v1/devices/{device_id}/bind-session": {
+      "post": {
+        "description": "Bind the CURRENT cookie session to a proven device. Requires a fresh\nproof of possession, so a stolen cookie alone cannot claim a device it\ncannot sign for. After binding, revoking the device revokes this session.",
+        "operationId": "bind_session_api_v1_devices__device_id__bind_session_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceProof"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Bind Session Api V1 Devices  Device Id  Bind Session Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bind Session",
         "tags": [
           "devices"
         ]

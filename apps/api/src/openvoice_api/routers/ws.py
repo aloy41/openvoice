@@ -22,7 +22,7 @@ import uuid
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 
-from ..authz import load_access
+from ..authz import load_access, viewable_channel_ids
 from ..events import channel_for, event_envelope_from_row
 from ..models import Event, User, UserSession
 from ..presence import (
@@ -36,6 +36,26 @@ from ..security import hash_session_secret
 log = logging.getLogger("openvoice.ws")
 
 router = APIRouter()
+
+# Events whose delivery must be gated by per-channel VIEW_CHANNELS.
+CONTENT_EVENT_TYPES = {
+    "message.created",
+    "message.updated",
+    "message.deleted",
+    "message.reaction_updated",
+}
+REPLAY_PAGE = 500
+
+
+def _event_channel_id(envelope: dict[str, object]) -> str | None:
+    payload = envelope.get("payload")
+    if isinstance(payload, dict):
+        if payload.get("channel_id"):
+            return str(payload["channel_id"])
+        message = payload.get("message")
+        if isinstance(message, dict) and message.get("channel_id"):
+            return str(message["channel_id"])
+    return None
 
 
 async def _authenticate_ws(websocket: WebSocket) -> User | None:
@@ -111,10 +131,66 @@ async def events_ws(websocket: WebSocket) -> None:
             await mark_online(presence_redis, community_id, str(user.id))
             await asyncio.sleep(PRESENCE_TTL_SECONDS / 2)
 
-    async def run_listener(community_id: str, min_seq: int) -> None:
+    # The set of channel ids this user may VIEW, refreshed whenever a
+    # permission-affecting event arrives. Channel-scoped events for channels
+    # NOT in this set are never delivered (authorization: a member must not
+    # receive content for channels they cannot see).
+    viewable: set[str] = set()
+
+    async def refresh_viewable(community_id: str) -> None:
+        nonlocal viewable
+        async with websocket.app.state.sessionmaker() as db:
+            try:
+                acc = await load_access(db, uuid.UUID(community_id), user)
+            except Exception:
+                viewable = set()
+                return
+            viewable = {str(c) for c in await viewable_channel_ids(db, acc)}
+
+    def visible(envelope: dict[str, object]) -> bool:
+        if envelope.get("type") in CONTENT_EVENT_TYPES:
+            ch = _event_channel_id(envelope)
+            return ch is None or ch in viewable
+        return True
+
+    async def run_subscription(community_id: str, after_seq: int) -> None:
         pubsub = redis.pubsub()
         try:
+            # Subscribe FIRST so live events are buffered by the pubsub client
+            # while we replay the durable log — no gap, and live delivery does
+            # not begin until replay is complete, so ordering is preserved.
             await pubsub.subscribe(channel_for(community_id))
+            await refresh_viewable(community_id)
+
+            # Replay the durable log fully (paginated) — closes the gap where a
+            # client behind by more than one page would silently miss events.
+            cursor = after_seq
+            while True:
+                async with websocket.app.state.sessionmaker() as db:
+                    batch = (
+                        (
+                            await db.execute(
+                                select(Event)
+                                .where(Event.community_id == community_id, Event.seq > cursor)
+                                .order_by(Event.seq)
+                                .limit(REPLAY_PAGE)
+                            )
+                        )
+                        .scalars()
+                        .all()
+                    )
+                if not batch:
+                    break
+                for event in batch:
+                    env = event_envelope_from_row(event)
+                    if visible(env):
+                        await websocket.send_json({"type": "event", "event": env})
+                cursor = batch[-1].seq
+                if len(batch) < REPLAY_PAGE:
+                    break
+
+            # Live: events buffered during replay + new ones, gated by seq so
+            # nothing already replayed is re-sent.
             async for item in pubsub.listen():
                 if item.get("type") != "message":
                     continue
@@ -122,16 +198,19 @@ async def events_ws(websocket: WebSocket) -> None:
                     envelope = json.loads(item["data"])
                 except (TypeError, ValueError):
                     continue
-                # Ephemeral signals (typing, presence) bypass the durable log.
                 if envelope.get("ephemeral"):
+                    # Typing is channel-scoped → filter by visibility.
+                    if envelope.get("type") == "typing":
+                        ch = envelope.get("channel_id")
+                        if ch and ch not in viewable:
+                            continue
                     await websocket.send_json(
                         {k: v for k, v in envelope.items() if k != "ephemeral"}
                     )
                     continue
-                # SECURITY: if THIS user's membership ended, stop the stream
-                # immediately — an open socket must not keep leaking events
-                # (including message contents) to a kicked or banned member.
-                if envelope.get("type") == "membership.removed" and envelope.get("payload", {}).get(
+                etype = str(envelope.get("type", ""))
+                # SECURITY: this user's membership ended → cut the stream now.
+                if etype == "membership.removed" and (envelope.get("payload") or {}).get(
                     "user_id"
                 ) == str(user.id):
                     await websocket.send_json(
@@ -142,8 +221,13 @@ async def events_ws(websocket: WebSocket) -> None:
                         }
                     )
                     return
-                # Drop anything already delivered by replay.
-                if int(envelope.get("seq", 0)) <= min_seq:
+                # Any permission-affecting change → recompute what's visible so
+                # channel-access removal takes effect immediately, mid-session.
+                if etype.startswith(("role.", "channel.", "membership.", "community.")):
+                    await refresh_viewable(community_id)
+                if int(envelope.get("seq", 0)) <= cursor:
+                    continue
+                if not visible(envelope):
                     continue
                 await websocket.send_json({"type": "event", "event": envelope})
         finally:
@@ -183,28 +267,16 @@ async def events_ws(websocket: WebSocket) -> None:
                 await websocket.send_json({"type": "error", "code": "invalid_subscribe"})
                 continue
 
+            # Authorize the subscription (membership) before anything else.
             async with websocket.app.state.sessionmaker() as db:
                 try:
                     access = await load_access(db, community_id, user)
                 except Exception:
                     await websocket.send_json({"type": "error", "code": "not_found"})
                     continue
-                replay = (
-                    (
-                        await db.execute(
-                            select(Event)
-                            .where(Event.community_id == community_id, Event.seq > after_seq)
-                            .order_by(Event.seq)
-                            .limit(500)
-                        )
-                    )
-                    .scalars()
-                    .all()
-                )
                 latest = access.community.event_seq
 
             await stop_listener()
-            # Switch presence to the newly-subscribed community.
             await leave_presence()
             current_community = str(community_id)
             await mark_online(presence_redis, current_community, str(user.id))
@@ -214,18 +286,10 @@ async def events_ws(websocket: WebSocket) -> None:
                 current_community,
                 {"type": "presence", "user_id": str(user.id), "online": True},
             )
-            # Start live fanout FIRST, then replay: anything published while
-            # we replay is either > replayed seqs (delivered live) or dropped
-            # by the min_seq filter (already replayed).
-            replay_max = replay[-1].seq if replay else after_seq
-            listener = asyncio.create_task(run_listener(str(community_id), replay_max))
             await websocket.send_json(
                 {"type": "subscribed", "community_id": str(community_id), "latest_seq": latest}
             )
-            for event in replay:
-                await websocket.send_json(
-                    {"type": "event", "event": event_envelope_from_row(event)}
-                )
+            listener = asyncio.create_task(run_subscription(str(community_id), after_seq))
     except WebSocketDisconnect:
         pass
     except Exception:

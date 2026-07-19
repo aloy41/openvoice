@@ -1,0 +1,55 @@
+# Production front door.
+#
+# One domain, one automatic Let's Encrypt certificate. Serves the static web
+# bundle and reverse-proxies the API and LiveKit signaling on the SAME origin,
+# so browsers get their secure context (microphone) and voice uses the same
+# certificate as the page. Voice MEDIA still flows over the published UDP/TCP
+# ports directly (SRTP has its own encryption).
+#
+# {$OPENVOICE_DOMAIN} and {$OPENVOICE_ACME_EMAIL} come from the environment
+# (docker-compose.prod.yml → .env.prod). Set a real domain that resolves to
+# this host, and ports 80/443 must be reachable for the ACME challenge.
+{
+	email {$OPENVOICE_ACME_EMAIL}
+	# Uncomment for testing against the Let's Encrypt staging CA to avoid rate
+	# limits: acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+{$OPENVOICE_DOMAIN} {
+	encode zstd gzip
+
+	# Security headers. HSTS is safe because this vhost is HTTPS-only.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		# CSP: self for app resources; connect to self + wss for the API and
+		# LiveKit signaling; images from self/data plus the GIF/image allowlist
+		# the threat model requires (Giphy/Tenor media). Scripts/objects stay
+		# self-only. No inline script; styles allow inline for the bundler.
+		Content-Security-Policy "default-src 'self'; connect-src 'self' wss: https:; img-src 'self' data: https://media.giphy.com https://*.giphy.com https://media.tenor.com https://c.tenor.com https://media1.tenor.com; media-src 'self' blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'"
+		-Server
+	}
+
+	# Metrics are for the private network only — never expose aggregate app
+	# counters to the internet. Scrape them from inside the compose network at
+	# http://api:8000/api/metrics instead.
+	@metrics path /api/metrics
+	respond @metrics 404
+
+	handle /rtc* {
+		reverse_proxy livekit:7880
+	}
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	# Static SPA: serve the file if it exists, else fall back to index.html so
+	# client-side routes resolve.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

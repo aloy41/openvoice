@@ -1,0 +1,18 @@
+# Keep build contexts clean and reproducible. Node/Python deps are installed
+# inside the image; copying host node_modules (with OS-specific/symlinked
+# workspace packages) breaks module resolution in the Linux build.
+**/node_modules
+**/dist
+**/.vite
+**/__pycache__
+**/*.pyc
+.git
+.env
+.env.*
+!.env.example
+!.env.prod.example
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+playwright-report
+test-results

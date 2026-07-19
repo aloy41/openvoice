@@ -236,3 +236,91 @@ actions still capability-gated and audited.
   environment.
 - CI pipeline has not executed on GitHub (nothing pushed yet); it is linted
   but unproven remotely.
+
+## 2026-07-19 — Security-hardening pass (backlog items 1–5)
+
+**Hardware/OS:** AMD Ryzen 9 7900X (12c), 95 GB RAM, Windows 11 Home,
+Docker Desktop (Compose v2). All services on one host; loopback network.
+
+Prioritized hardening backlog worked in order:
+
+1. **Event authorization + replay gaps + live revocation.** WebSocket delivery
+   now filters channel-scoped events by each subscriber's live `VIEW_CHANNELS`
+   set (`authz.viewable_channel_ids`), recomputed on any role/channel/
+   membership/community event so access removal takes effect mid-session.
+   Replay paginates the full durable log (`REPLAY_PAGE`) instead of silently
+   capping at one page, and subscribes to pub/sub *before* replaying so no live
+   event is dropped in the gap. Adversarial tests added: a hidden-channel leak
+   test (member never receives content for a channel they cannot view) and a
+   pagination test (all events replay across multiple pages).
+2. **Event retention.** Deleting a message now scrubs its content from the
+   durable event log (`scrub_message_from_events`, `flag_modified` so the JSONB
+   write persists), not just the messages row. A background sweep prunes events
+   older than `event_retention_seconds` (default 14 days). Backup/restore and
+   scrub verified by tests.
+3. **Security-doc correction.** Removed every unsupported "audited" claim about
+   libraries/crypto (kept legitimate admin audit-log references); replaced with
+   "widely-used, maintained" and explicit "no independent audit" statements in
+   `SECURITY.md`, `README.md`, the threat model, and ADRs. Rewrote the stale
+   data-retention statement to match shipped behavior.
+4. **Dedicated CI.** New `.github/workflows/e2e-full.yml` runs the real-media
+   suites (voice E2EE, media-flow, TURN relay, reconnect chaos, soak) on
+   workflow_dispatch + a nightly schedule, on `ubuntu-latest` or a self-hosted
+   runner via the `E2E_RUNNER` repo variable. Documented in `dedicated-ci.md`.
+5. **Production deployment.** `docker-compose.prod.yml` (built images, prod
+   auth, private DB/Redis, non-root, `no-new-privileges`, restart policies,
+   memory limits, Let's Encrypt TLS), slim non-root `Dockerfile.prod`, a
+   web+Caddy front-door image with a CSP/security-header Caddyfile, scheduled
+   `pg_dump` backups with retention, and a Prometheus `/api/metrics` endpoint.
+
+| Check | Result |
+| --- | --- |
+| API: ruff lint + format, mypy --strict | clean (29 source files) |
+| API: pytest (real PostgreSQL/Redis) | 100/100 passed |
+| Prod compose config validates | `docker compose -f docker-compose.prod.yml config` exit 0 |
+| Prod API image builds | `Dockerfile.prod` exit 0 |
+| Prod front-door image builds (web bundle + Caddy) | exit 0 (needed root `.dockerignore`) |
+| Prod Caddyfile validates | `caddy validate` → "Valid configuration" |
+| Backup script (pg_dump → gzip) | dumped populated DB (429 KB) |
+| Restore round-trip into fresh DB | schema + row counts identical (16 tables, 703 users, 507 events) |
+| OpenAPI + TS client regenerated for `/api/metrics` | no drift |
+
+**Not yet done** (backlog item 6, intentionally last): genuine device-bound
+sessions and a reviewed group-key protocol (MLS) — the largest effort.
+
+## 2026-07-19 — Device-bound sessions (backlog item 6, part 1)
+
+**Hardware/OS:** as above (Ryzen 9 7900X, Docker Desktop, loopback network).
+
+Implemented genuine **device-bound sessions** (ADR-0008) using standard crypto
+only — pyca/cryptography server-side, Web Crypto client-side, no custom
+primitives:
+
+- Device registration now requires **proof of possession**: the client fetches
+  a signed, time-limited challenge (`POST /devices/challenge`), signs the nonce
+  with its non-extractable ECDSA P-256 device key, and registers with that
+  proof. A public key can no longer be registered by anyone who does not hold
+  the private key.
+- Sessions bind to a proven device (`POST /devices/{id}/bind-session`, fresh
+  proof required; `sessions.device_id`, migration 0009).
+- **Revoking a device revokes every session bound to it.**
+- Wire formats (SPKI public key, raw IEEE-P1363 signature) match the browser
+  exactly; API tests generate real P-256 keys and sign, exercising the same
+  verification path a client hits.
+
+The MLS group-key protocol (ADR-0009) is delivered as **design only** — a
+reviewed client-side MLS library and its integration are a separate, review-
+gated effort, and E2EE labeling is unchanged (still opt-in/passphrase). This is
+the honest boundary: no custom crypto, no unimplemented E2EE claimed.
+
+| Check | Result |
+| --- | --- |
+| API: ruff lint + format, mypy --strict | clean (30 source files) |
+| API: pytest (real PostgreSQL/Redis) | 103/103 passed |
+| Device proof-of-possession tests (valid/forged/expired/mismatched key) | pass |
+| Device revocation revokes bound session | pass (session → 401 after revoke) |
+| Web: eslint, tsc --noEmit | clean |
+| Web: vitest | 37/37 passed |
+| Migration 0009 (sessions.device_id) applies | pass (clean_db path) |
+| OpenAPI + TS client regenerated (challenge/bind-session endpoints) | no drift |
+| `cryptography==45.0.7` pinned in constraints.txt | done |

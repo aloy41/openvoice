@@ -64,6 +64,93 @@ async def test_send_list_edit_delete_flow(app: FastAPI, clean_db: None) -> None:
         ).status_code == 404
 
 
+async def test_delete_scrubs_content_from_durable_event_log(app: FastAPI, clean_db: None) -> None:
+    """A deleted message's content must not survive inside the event log:
+    otherwise a reconnecting client would replay message.created and recover
+    the 'deleted' text. The stored event keeps its envelope but empty content."""
+    from sqlalchemy import select
+
+    from openvoice_api.models import Event
+
+    async with user_client(app, uname("owner")) as owner:
+        detail = await create_community(owner)
+        cid = detail["community"]["id"]
+        channel_id = await text_channel_of(owner, cid)
+        msg = await send(owner, channel_id, "delete-me-secret-body")
+
+        # Sanity: the content is in the durable log before deletion.
+        async with app.state.sessionmaker() as db:
+            rows = (
+                (await db.execute(select(Event).where(Event.type == "message.created")))
+                .scalars()
+                .all()
+            )
+        assert any("delete-me-secret-body" in (r.payload["message"]["content"]) for r in rows)
+
+        assert (await owner.delete(f"/api/v1/messages/{msg['id']}")).status_code == 200
+
+        # After deletion the content is gone from every event row for this id.
+        async with app.state.sessionmaker() as db:
+            rows = (
+                (
+                    await db.execute(
+                        select(Event).where(Event.type.in_(("message.created", "message.updated")))
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        for r in rows:
+            message = r.payload.get("message")
+            if message and message.get("id") == msg["id"]:
+                assert message["content"] == ""
+                assert message.get("scrubbed") is True
+
+
+async def test_retention_prunes_events_older_than_window(app: FastAPI, clean_db: None) -> None:
+    """Old events are pruned so content cannot linger past the retention
+    window; recent events are kept for reconnect catch-up."""
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import func, select
+
+    from openvoice_api.events import prune_all_communities
+    from openvoice_api.models import Event
+
+    async with user_client(app, uname("owner")) as owner:
+        detail = await create_community(owner)
+        cid = detail["community"]["id"]
+        channel_id = await text_channel_of(owner, cid)
+        await send(owner, channel_id, "old message")
+
+        # Backdate every existing event well past the window.
+        from sqlalchemy import update as sql_update
+
+        async with app.state.sessionmaker() as db:
+            await db.execute(
+                sql_update(Event).values(created_at=datetime.now(tz=UTC) - timedelta(days=40))
+            )
+            await db.commit()
+
+        await send(owner, channel_id, "fresh message")
+
+        async with app.state.sessionmaker() as db:
+            removed = await prune_all_communities(db, keep_seconds=14 * 24 * 60 * 60)
+            await db.commit()
+        assert removed >= 1
+
+        async with app.state.sessionmaker() as db:
+            remaining = (await db.execute(select(func.count()).select_from(Event))).scalar_one()
+            fresh = (
+                (await db.execute(select(Event).where(Event.type == "message.created")))
+                .scalars()
+                .all()
+            )
+        assert remaining >= 1
+        assert any("fresh message" in r.payload["message"]["content"] for r in fresh)
+        assert not any("old message" in r.payload["message"]["content"] for r in fresh)
+
+
 async def test_manage_messages_moderator_delete(app: FastAPI, clean_db: None) -> None:
     async with (
         user_client(app, uname("owner")) as owner,

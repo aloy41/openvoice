@@ -60,7 +60,7 @@ mandatory hosted services.
 Openvoice is honest about what is and isn't protected:
 
 - **Voice** is end-to-end encrypted when everyone in a call enters the same
-  passphrase (LiveKit's audited frame-encryption keyed by a client-side
+  passphrase (LiveKit's built-in frame-encryption keyed by a client-side
   passphrase). The SFU, API, database, and operator cannot access that audio —
   verified by a test in which a fully-authorized client with the *wrong*
   passphrase gets only silence. Without a passphrase, voice is transport-encrypted
@@ -73,6 +73,9 @@ Openvoice is honest about what is and isn't protected:
 - **No custom cryptography** — WebRTC, Opus, LiveKit's E2EE, and Web Crypto only.
 - Passphrases are shared out-of-band and there is **no automatic key rotation
   yet**; automatic group keying (MLS) is the planned next step.
+- **No independent security audit** has been performed on this project or its
+  integration of the underlying libraries. Do not rely on it for sensitive
+  communication without your own review.
 
 Full threat model: [`docs/security/threat-model.md`](docs/security/threat-model.md).
 Report vulnerabilities per [`SECURITY.md`](SECURITY.md).
