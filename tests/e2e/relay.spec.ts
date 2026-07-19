@@ -4,26 +4,27 @@
  * embedded TURN server allocates and relays media. Asserts the same media
  * proofs as media-flow.spec.ts (server VAD + subscriber-side energy).
  *
- * Gated behind RUN_RELAY=1 (needs the TURN port published):
+ * Gated behind RUN_RELAY=1 (needs LIVEKIT_NODE_IP set to a LAN IP):
  *   RUN_RELAY=1 npx playwright test relay
  */
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
-const DEV_PASSWORD = process.env.OPENVOICE_DEV_AUTH_PASSWORD ?? "";
+import { E2E_PASSWORD, measureRemoteAudio, uniqueName } from "./helpers";
 
 test.skip(process.env.RUN_RELAY !== "1", "set RUN_RELAY=1 to run TURN relay validation");
-test.skip(DEV_PASSWORD === "", "OPENVOICE_DEV_AUTH_PASSWORD is not set");
 
-async function signInAndJoinRelayed(page: Page, username: string) {
+async function registerRelayed(page: Page, prefix: string): Promise<string> {
+  const username = uniqueName(prefix);
   await page.goto("/?forceRelay=1");
+  await page.getByRole("button", { name: "Create an account" }).click();
   await page.getByLabel("Username").fill(username);
-  await page.getByLabel("Development password").fill(DEV_PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await page.getByRole("button", { name: "Join voice" }).click();
-  await expect(page.getByTestId("connection-status")).toHaveText("Connected", {
-    timeout: 30_000,
+  await page.getByLabel("Password").fill(E2E_PASSWORD);
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByRole("button", { name: "Join voice" })).toBeVisible({
+    timeout: 15_000,
   });
+  return username;
 }
 
 test("a relay-only call succeeds through TURN with real media", async ({ browser }) => {
@@ -33,46 +34,24 @@ test("a relay-only call succeeds through TURN with real media", async ({ browser
   const alice = await ctxA.newPage();
   const bob = await ctxB.newPage();
 
-  await signInAndJoinRelayed(alice, "relay-alice");
-  await signInAndJoinRelayed(bob, "relay-bob");
+  const aliceName = await registerRelayed(alice, "relay-alice");
+  await registerRelayed(bob, "relay-bob");
+
+  for (const page of [alice, bob]) {
+    await page.getByRole("button", { name: "Join voice" }).click();
+    await expect(page.getByTestId("connection-status")).toHaveText("Connected", {
+      timeout: 30_000,
+    });
+  }
 
   const rowForAlice = bob
     .getByRole("list", { name: "Participants" })
     .getByRole("listitem")
-    .filter({ hasText: "relay-alice" });
+    .filter({ hasText: aliceName });
   await expect(rowForAlice).toBeVisible({ timeout: 15_000 });
   await expect(rowForAlice.getByText("speaking")).toBeAttached({ timeout: 20_000 });
 
-  const result = await bob.evaluate(async () => {
-    const els = Array.from(document.querySelectorAll("audio")).filter(
-      (el): el is HTMLAudioElement => el instanceof HTMLAudioElement && el.srcObject !== null,
-    );
-    if (els.length === 0) return { attached: 0, peak: -1 };
-    const ctx = new AudioContext();
-    await ctx.resume().catch(() => undefined);
-    const analysers = els.map((el) => {
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 512;
-      ctx.createMediaStreamSource(el.srcObject as MediaStream).connect(analyser);
-      return analyser;
-    });
-    const data = new Uint8Array(256);
-    let peak = 0;
-    const t0 = performance.now();
-    while (performance.now() - t0 < 6000 && peak < 0.05) {
-      await new Promise((r) => setTimeout(r, 50));
-      for (const analyser of analysers) {
-        analyser.getByteTimeDomainData(data);
-        for (const v of data) {
-          const a = Math.abs(v - 128) / 128;
-          if (a > peak) peak = a;
-        }
-      }
-    }
-    await ctx.close().catch(() => undefined);
-    return { attached: els.length, peak };
-  });
-
+  const result = await measureRemoteAudio(bob);
   expect(result.attached).toBeGreaterThan(0);
   expect(result.peak, "relayed audio must carry energy").toBeGreaterThan(0.02);
 

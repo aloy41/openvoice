@@ -1,6 +1,6 @@
 /**
  * Automated accessibility checks (axe-core) for every screen of the current
- * slice: login, pre-join, and in-call. WCAG 2.1 A/AA rulesets. These are a
+ * slice: auth, pre-join, and in-call. WCAG 2.1 A/AA rulesets. These are a
  * floor, not a ceiling — manual keyboard/screen-reader passes are still part
  * of the release checklist.
  */
@@ -8,9 +8,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
-const DEV_PASSWORD = process.env.OPENVOICE_DEV_AUTH_PASSWORD ?? "";
-
-test.skip(DEV_PASSWORD === "", "OPENVOICE_DEV_AUTH_PASSWORD is not set");
+import { joinVoice, registerAndSignIn } from "./helpers";
 
 async function expectNoViolations(page: Page, screen: string) {
   const results = await new AxeBuilder({ page })
@@ -24,32 +22,22 @@ async function expectNoViolations(page: Page, screen: string) {
   expect(summary, `axe violations on ${screen}`).toEqual([]);
 }
 
-async function signIn(page: Page, username: string) {
-  await page.goto("/");
-  await page.getByLabel("Username").fill(username);
-  await page.getByLabel("Development password").fill(DEV_PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Join voice" })).toBeVisible({
-    timeout: 10_000,
-  });
-}
-
-test("login screen has no axe violations", async ({ page }) => {
+test("auth screen (sign in and create account) has no axe violations", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByLabel("Username")).toBeVisible();
-  await expectNoViolations(page, "login");
+  await expectNoViolations(page, "sign-in");
+  await page.getByRole("button", { name: "Create an account" }).click();
+  await expect(page.getByRole("button", { name: "Create account" })).toBeVisible();
+  await expectNoViolations(page, "create-account");
 });
 
 test("pre-join and in-call screens have no axe violations", async ({ browser }) => {
   const ctx = await browser.newContext({ permissions: ["microphone"] });
   const page = await ctx.newPage();
-  await signIn(page, "a11y-user");
+  await registerAndSignIn(page, "a11y");
   await expectNoViolations(page, "pre-join");
 
-  await page.getByRole("button", { name: "Join voice" }).click();
-  await expect(page.getByTestId("connection-status")).toHaveText("Connected", {
-    timeout: 20_000,
-  });
+  await joinVoice(page);
   await expect(page.getByRole("list", { name: "Participants" })).toBeVisible();
   await expectNoViolations(page, "in-call");
   await ctx.close();

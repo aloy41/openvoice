@@ -149,19 +149,30 @@ async def register(
         existing = (
             await db.execute(select(User).where(User.username == username))
         ).scalar_one_or_none()
-        if existing is not None:
+        if existing is not None and not (existing.is_dev_user and existing.password_hash is None):
             raise HTTPException(
                 status_code=409,
                 detail={"code": "username_taken", "message": "That username is taken."},
             )
-        user = User(
-            username=username,
-            display_name=body.display_name or body.username,
-            is_dev_user=False,
-            password_hash=hash_password(body.password),
-            last_login_at=now,
-        )
-        db.add(user)
+        if existing is not None:
+            # Claim a passwordless dev-login account by setting a password.
+            # Dev accounts only exist where dev auth was enabled (never in
+            # production, enforced at startup), so this cannot hijack a real
+            # account.
+            user = existing
+            user.password_hash = hash_password(body.password)
+            user.is_dev_user = False
+            user.display_name = body.display_name or body.username
+            user.last_login_at = now
+        else:
+            user = User(
+                username=username,
+                display_name=body.display_name or body.username,
+                is_dev_user=False,
+                password_hash=hash_password(body.password),
+                last_login_at=now,
+            )
+            db.add(user)
         await db.commit()
         await db.refresh(user)
     expires_at = await _create_session(request, response, user)

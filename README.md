@@ -69,10 +69,13 @@ Python 3.12 container.
 
 3. Open **http://localhost:8080**.
 
-4. Sign in with any username and the development password you set in `.env`
-   (`OPENVOICE_DEV_AUTH_PASSWORD`). Pick a microphone, run the mic test, and
-   join the development voice room. Open a second browser window (or a private
-   window) and join with a different username to talk to yourself.
+4. Create an account (any username, password of 10+ characters). Pick a
+   microphone, run the mic test, and join the development voice room. Open a
+   private window, create a second account, and join to talk to yourself.
+   Sessions are cookie-based and survive page reloads.
+
+   The development shared-password login (`OPENVOICE_DEV_AUTH_*`) remains an
+   API-only convenience for tests; the UI uses real accounts.
 
 ### Verifying the installation
 
@@ -128,9 +131,12 @@ CI fails if the committed schema or generated client drifts from the code.
 ## Known limitations (current milestone)
 
 - **No E2EE yet** — see the security status above.
-- Development authentication only: a shared development password behind
-  `OPENVOICE_DEV_AUTH_ENABLED`, which the API **refuses to start with** in
-  production mode. There are no real accounts, sessions, or devices yet.
+- Accounts are username+password only — **no password recovery exists yet**
+  (no email on file); a lost password means a lost account, and the sign-up
+  UI says so. Devices/per-device keys are not implemented yet.
+- The dev-only shared-password login still exists behind
+  `OPENVOICE_DEV_AUTH_ENABLED` (API-only, used by tests); the API refuses to
+  start with it in production mode.
 - One fixed development voice room; no communities, channels, roles,
   permissions, invites, or text messaging yet.
 - No rate limiting on the development login endpoint (it is dev-only and must
