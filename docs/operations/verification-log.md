@@ -210,6 +210,25 @@ Also fixed a pre-existing e2e flake: real-media tests were over-parallelized,
 starving server-side voice-activity timing under CPU load. Capped workers
 (3 local / 2 CI) with one retry — suite is now reliable AND faster (15s).
 
+### Richness pass (2026-07-19) — profiles, reactions, presence, GIFs, polish
+
+A large product-richness batch, each a tested slice (commits ac69f33,
+9cdb53f, 715208e, e5f568e, plus 50cc52d, 161638d, 33b4cfd):
+- Profiles: accent colour, pronouns, bio; editor + clickable profile cards;
+  colours flow into avatars/names everywhere (migration 0007).
+- Emoji reactions: toggle, live counts, own-highlight (migration 0008).
+- Presence + typing: Redis-backed online tracking over the WS (ephemeral),
+  online dots/counts, live "X is typing…".
+- Inline GIF/image embeds (client-side, SSRF-safe, host allowlist).
+- Channel management UI, avatars, XSS-safe rich text, message grouping.
+- Emoji picker in the composer, community rename (live), unread badges.
+
+Totals after this pass: 95 API tests, 21 e2e (3 gated), 37 web unit tests,
+axe WCAG 2.1 AA clean on all screens, lint/types/build clean. Migrations
+0007–0008 applied. No security regression: encryption honesty preserved
+(now an on-demand dialog + in-context call/message states), all destructive
+actions still capability-gated and audited.
+
 **Not yet verified** (open Milestone 1 exit items):
 - TURN over **TLS** for the most restrictive networks — requires a domain and
   real certificate; part of the hardened production deployment (M4).
