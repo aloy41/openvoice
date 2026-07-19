@@ -97,6 +97,30 @@ Operational note recorded: the API dev server hot-reloads code but only
 applies migrations at container start — after pulling schema changes, run
 `docker compose -f docker-compose.dev.yml up -d --force-recreate api`.
 
+### Community domain + permission engine (ADR-0005, same day)
+
+34 new API tests (72 total, all green against real PostgreSQL/Redis):
+
+- 14 table-driven permission-precedence cases — the executable contract for
+  the ADR-0005 algorithm (deny-by-default, role unions, owner/admin
+  bypass, everyone→role→member override precedence, deny-before-allow).
+- Community lifecycle with provisioned defaults (@everyone role, starter
+  category/text/voice channels), owner-only deletion (administrators
+  refused), audit trail verified end-to-end.
+- IDOR posture: non-members receive 404 for every community-scoped route.
+- Invites: hashed codes, body-based redemption (secrets never in URLs),
+  idempotent re-join, max-uses, expiry, ban-blocking, capability-gated
+  creation, per-account redemption rate limiting.
+- Moderation: kick/ban/unban flows, immediate access loss, rejoin
+  semantics, owner/self-protection, audit access control.
+- Authorized voice-channel tokens: server-derived per-channel rooms,
+  CONNECT_VOICE gating, SPEAK→canPublish mapping, member-specific override
+  precedence over role denies, kicked members refused instantly.
+
+Migration 0003 exercised by the test session and applied to the dev
+database. Web e2e suite unaffected (7/7). The community UI is the next
+slice; until then these endpoints are API-only.
+
 **Not yet verified** (open Milestone 1 exit items):
 - TURN over **TLS** for the most restrictive networks — requires a domain and
   real certificate; part of the hardened production deployment (M4).

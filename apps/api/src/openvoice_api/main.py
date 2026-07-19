@@ -22,7 +22,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import Environment, Settings
 from .logging_setup import configure_logging, request_id_var
-from .routers import auth, dev_auth, health, voice
+from .routers import auth, communities, dev_auth, health, invites, moderation, roles, voice
 from .security import new_csrf_token
 
 log = logging.getLogger("openvoice.api")
@@ -147,5 +147,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(dev_auth.router, prefix="/api/v1")
     app.include_router(voice.router, prefix="/api/v1")
+    app.include_router(communities.router, prefix="/api/v1")
+    app.include_router(invites.router, prefix="/api/v1")
+    app.include_router(moderation.router, prefix="/api/v1")
+    app.include_router(roles.router, prefix="/api/v1")
 
     return app

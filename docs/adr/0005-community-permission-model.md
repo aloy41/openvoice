@@ -1,8 +1,15 @@
 # ADR-0005: Community domain and permission model
 
-- Status: **proposed** (design for the next Milestone 2 slice; becomes
-  accepted when the implementation and its table-driven tests land)
+- Status: accepted (implemented with table-driven precedence tests in
+  `tests/test_permissions.py`; that file is the executable contract)
 - Date: 2026-07-18
+
+Implementation notes for this slice: role create/edit/delete/assign requires
+ADMINISTRATOR or ownership — the finer MANAGE_ROLES position-hierarchy rules
+(open question 1) are deferred and MANAGE_ROLES is reserved. Channel
+overrides require MANAGE_CHANNELS, and non-administrators cannot touch
+capability bits they do not hold. Kick/ban hierarchy between non-owner staff
+is limited to owner- and self-protection for now.
 
 ## Context
 
