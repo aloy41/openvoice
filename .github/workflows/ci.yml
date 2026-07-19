@@ -131,6 +131,11 @@ jobs:
         with:
           node-version: "22"
           cache: npm
+      # Install host deps BEFORE starting the stack: the web container runs as
+      # root and writes apps/web/node_modules/.vite into the bind mount, which
+      # a later `npm ci` (as the runner user) cannot remove (EACCES).
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
       - name: Create .env for the stack
         run: |
           cat > .env <<EOF
@@ -152,8 +157,6 @@ jobs:
             sleep 3
           done
           echo "stack did not become ready"; docker compose -f docker-compose.dev.yml logs; exit 1
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
       # Real-media voice tests (LiveKit join + audio decode) are skipped here —
       # shared runners have no reliable WebRTC media path. They run locally and
       # on self-hosted runners (set RUN_VOICE_E2E=1). See tests/e2e/helpers.ts.
