@@ -83,6 +83,6 @@ test("a session survives a page reload", async ({ browser }) => {
   await expect(page.getByRole("heading", { name: "Create a community" })).toBeVisible({
     timeout: 15_000,
   });
-  await expect(page.getByText("Signed in as")).toContainText(name);
+  await expect(page.getByRole("button", { name: "Edit your profile" })).toContainText(name);
   await ctx.close();
 });

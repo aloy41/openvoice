@@ -36,6 +36,10 @@ class User(Base):
     is_dev_user: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     # Argon2id hash; NULL for dev-login accounts.
     password_hash: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # Profile customization (all optional).
+    accent_color: Mapped[str | None] = mapped_column(String(7), nullable=True)  # "#rrggbb"
+    pronouns: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    bio: Mapped[str | None] = mapped_column(String(280), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

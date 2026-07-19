@@ -24,10 +24,14 @@ export function Avatar({
   name,
   size = "md",
   speaking = false,
+  color = null,
 }: {
   name: string;
   size?: keyof typeof SIZES;
   speaking?: boolean;
+  /** Custom accent colour (hex). Falls back to a deterministic hue at a fixed
+   * low lightness so white text meets WCAG AA contrast for every hue. */
+  color?: string | null;
 }) {
   const hue = hashHue(name);
   return (
@@ -36,8 +40,7 @@ export function Avatar({
       className={`inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white ${SIZES[size]} ${
         speaking ? "ring-2 ring-emerald-400" : ""
       }`}
-      // Fixed low lightness so white text meets WCAG AA contrast for every hue.
-      style={{ backgroundColor: `hsl(${hue} 45% 28%)` }}
+      style={{ backgroundColor: color ?? `hsl(${hue} 45% 28%)` }}
     >
       {initials(name)}
     </span>

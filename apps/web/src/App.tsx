@@ -5,6 +5,8 @@ import { AuthScreen } from "./components/AuthScreen";
 import { CommunityApp } from "./components/CommunityApp";
 import { DevicesModal } from "./components/DevicesModal";
 import { EncryptionDialog } from "./components/EncryptionDialog";
+import { ProfileModal } from "./components/ProfileModal";
+import { Avatar } from "./components/Avatar";
 import { SessionProvider, useSession } from "./session";
 
 const queryClient = new QueryClient({
@@ -17,6 +19,7 @@ function Shell() {
   const { status, user, signOut } = useSession();
   const [showDevices, setShowDevices] = useState(false);
   const [showEncryption, setShowEncryption] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   return (
     <div className="flex h-screen flex-col bg-slate-950 text-slate-100">
       <header className="shrink-0 border-b border-slate-800 px-6 py-3">
@@ -24,9 +27,14 @@ function Shell() {
           <h1 className="text-lg font-semibold tracking-tight">Openvoice</h1>
           {user && (
             <div className="flex items-center gap-3 text-sm">
-              <span className="text-slate-400">
-                Signed in as <span className="text-slate-200">{user.display_name}</span>
-              </span>
+              <button
+                onClick={() => setShowProfile(true)}
+                className="flex items-center gap-2 rounded-md border border-slate-700 px-2 py-1 hover:bg-slate-800"
+                aria-label="Edit your profile"
+              >
+                <Avatar name={user.display_name} size="sm" color={user.accent_color} />
+                <span className="text-slate-200">{user.display_name}</span>
+              </button>
               <button
                 onClick={() => setShowEncryption(true)}
                 title="About encryption"
@@ -52,6 +60,7 @@ function Shell() {
       </header>
       {showDevices && <DevicesModal onClose={() => setShowDevices(false)} />}
       {showEncryption && <EncryptionDialog onClose={() => setShowEncryption(false)} />}
+      {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
       <div className="min-h-0 flex-1">
         {status === "loading" && (
           <p role="status" className="px-6 py-8 text-sm text-slate-400">

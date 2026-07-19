@@ -32,6 +32,8 @@ export interface SessionUser {
   id: string;
   username: string;
   display_name: string;
+  accent_color?: string | null;
+  pronouns?: string | null;
 }
 
 export type SessionStatus = "loading" | "signed-out" | "signed-in";
@@ -46,6 +48,8 @@ interface SessionContextValue {
   signIn: (username: string, password: string) => Promise<AuthResult>;
   signUp: (username: string, password: string) => Promise<AuthResult>;
   signOut: () => Promise<void>;
+  /** Re-fetch the current user (e.g. after a profile edit). */
+  refresh: () => Promise<void>;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -120,6 +124,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [authenticate],
   );
 
+  const refresh = useCallback(async () => {
+    try {
+      const { data } = await api.GET("/api/v1/auth/session");
+      if (data) setUser(data.user);
+    } catch {
+      // ignore — keep existing state
+    }
+  }, []);
+
   const signOut = useCallback(async () => {
     try {
       await api.POST("/api/v1/auth/logout");
@@ -132,8 +145,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ status, user, signIn, signUp, signOut }),
-    [status, user, signIn, signUp, signOut],
+    () => ({ status, user, signIn, signUp, signOut, refresh }),
+    [status, user, signIn, signUp, signOut, refresh],
   );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

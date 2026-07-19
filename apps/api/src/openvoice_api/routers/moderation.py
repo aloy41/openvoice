@@ -26,6 +26,8 @@ class MemberOut(BaseModel):
     user_id: uuid.UUID
     username: str
     display_name: str
+    accent_color: str | None
+    pronouns: str | None
     joined_at: datetime
     is_owner: bool
 
@@ -98,6 +100,8 @@ async def list_members(community_id: uuid.UUID, request: Request) -> MemberListO
                 user_id=user.id,
                 username=user.username,
                 display_name=user.display_name,
+                accent_color=user.accent_color,
+                pronouns=user.pronouns,
                 joined_at=membership.created_at,
                 is_owner=user.id == access.community.owner_id,
             )

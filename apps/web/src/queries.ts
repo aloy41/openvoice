@@ -145,6 +145,41 @@ export function useDeleteMessage() {
 export type MemberInfo = components["schemas"]["MemberOut"];
 export type BanInfo = components["schemas"]["BanOut"];
 export type DeviceInfo = components["schemas"]["DeviceOut"];
+export type Profile = components["schemas"]["ProfileOut"];
+
+export function useProfile(userId: string | null) {
+  return useQuery({
+    queryKey: ["profile", userId],
+    enabled: userId !== null,
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/users/{user_id}", {
+        params: { path: { user_id: userId! } },
+      });
+      if (error || !data) throw new Error("failed to load profile");
+      return data;
+    },
+  });
+}
+
+export function useUpdateProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (patch: {
+      display_name?: string;
+      accent_color?: string | null;
+      pronouns?: string | null;
+      bio?: string | null;
+    }) => {
+      const { data, error } = await api.PATCH("/api/v1/users/me", { body: patch });
+      if (error || !data) throw new Error("Could not save your profile.");
+      return data;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["profile"] });
+      void qc.invalidateQueries({ queryKey: ["members"] });
+    },
+  });
+}
 
 export function useDevices(enabled: boolean) {
   return useQuery({
