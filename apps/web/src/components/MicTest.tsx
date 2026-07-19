@@ -14,16 +14,23 @@ interface MicTestProps {
  * mic back to the selected output ("hear myself") — with an echo warning,
  * since that loops audio to speakers.
  *
+ * Diagnostics: while testing we show which device the browser actually
+ * captured (it can differ from the dropdown), surface the OS-level muted
+ * flag, and warn with actionable causes if the capture stays silent.
+ *
  * Changing the input device while testing restarts the capture with the new
- * device. This also covers the first-use case where granting permission
- * refreshes the device list and upgrades the selected id from "" to a real
- * device id — the test must survive that, not silently stop.
+ * device. Restarts are guarded by the actually-captured device id so
+ * re-renders can never trigger a restart loop (which previously killed each
+ * capture before the meter accumulated data).
  */
 export function MicTest({ deviceId, outputDeviceId, onPermissionGranted }: MicTestProps) {
   const [testing, setTesting] = useState(false);
   const [monitoring, setMonitoring] = useState(false);
   const [level, setLevel] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [captureLabel, setCaptureLabel] = useState<string | null>(null);
+  const [osMuted, setOsMuted] = useState(false);
+  const [silentHint, setSilentHint] = useState(false);
 
   const testingRef = useRef(false);
   const activeDevRef = useRef<string | null>(null);
@@ -32,6 +39,8 @@ export function MicTest({ deviceId, outputDeviceId, onPermissionGranted }: MicTe
   const streamRef = useRef<MediaStream | null>(null);
   const ctxRef = useRef<AudioContext | null>(null);
   const rafRef = useRef(0);
+  const peakRef = useRef(0);
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const monitorElRef = useRef<HTMLAudioElement | null>(null);
 
   const detachMonitor = useCallback(() => {
@@ -56,8 +65,14 @@ export function MicTest({ deviceId, outputDeviceId, onPermissionGranted }: MicTe
 
   const releaseCapture = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    silenceTimerRef.current = null;
     detachMonitor();
-    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current?.getTracks().forEach((t) => {
+      t.onmute = null;
+      t.onunmute = null;
+      t.stop();
+    });
     streamRef.current = null;
     void ctxRef.current?.close().catch(() => undefined);
     ctxRef.current = null;
@@ -69,11 +84,15 @@ export function MicTest({ deviceId, outputDeviceId, onPermissionGranted }: MicTe
     activeDevRef.current = null;
     setTesting(false);
     setLevel(0);
+    setCaptureLabel(null);
+    setOsMuted(false);
+    setSilentHint(false);
   }, [releaseCapture]);
 
   const start = useCallback(
     async (dev: string) => {
       setError(null);
+      setSilentHint(false);
       releaseCapture();
       let stream: MediaStream;
       try {
@@ -91,6 +110,14 @@ export function MicTest({ deviceId, outputDeviceId, onPermissionGranted }: MicTe
       setTesting(true);
       onPermissionGranted?.();
 
+      const track = stream.getAudioTracks()[0];
+      setCaptureLabel(track?.label ?? null);
+      setOsMuted(track?.muted ?? false);
+      if (track) {
+        track.onmute = () => setOsMuted(true);
+        track.onunmute = () => setOsMuted(false);
+      }
+
       const ctx = new AudioContext();
       ctxRef.current = ctx;
       // Chrome may create the context suspended when the permission prompt
@@ -100,6 +127,7 @@ export function MicTest({ deviceId, outputDeviceId, onPermissionGranted }: MicTe
       analyser.fftSize = 512;
       ctx.createMediaStreamSource(stream).connect(analyser);
       const data = new Uint8Array(analyser.frequencyBinCount);
+      peakRef.current = 0;
       const tick = () => {
         analyser.getByteTimeDomainData(data);
         let sum = 0;
@@ -107,10 +135,15 @@ export function MicTest({ deviceId, outputDeviceId, onPermissionGranted }: MicTe
           const centered = (v - 128) / 128;
           sum += centered * centered;
         }
-        setLevel(Math.min(1, Math.sqrt(sum / data.length) * 3));
+        const value = Math.min(1, Math.sqrt(sum / data.length) * 3);
+        if (value > peakRef.current) peakRef.current = value;
+        setLevel(value);
         rafRef.current = requestAnimationFrame(tick);
       };
       tick();
+      silenceTimerRef.current = setTimeout(() => {
+        if (testingRef.current && peakRef.current < 0.02) setSilentHint(true);
+      }, 3000);
       if (monitoringRef.current) await attachMonitor();
     },
     [attachMonitor, onPermissionGranted, releaseCapture, stop],
@@ -171,6 +204,26 @@ export function MicTest({ deviceId, outputDeviceId, onPermissionGranted }: MicTe
           Hear myself
         </label>
       </div>
+      {testing && captureLabel !== null && (
+        <p data-testid="capture-info" className="text-xs text-slate-400">
+          Capturing: {captureLabel === "" ? "(unnamed device)" : captureLabel}
+        </p>
+      )}
+      {testing && osMuted && (
+        <p role="alert" className="text-sm text-amber-300">
+          Windows reports this microphone as muted. Check the hardware mute switch/key and the
+          Windows sound settings for this device.
+        </p>
+      )}
+      {testing && silentHint && !osMuted && (
+        <p role="alert" className="text-sm text-amber-300">
+          No sound is arriving from this device. Try: pick a different microphone in the list
+          above; check Windows Settings → Privacy &amp; security → Microphone (both the global
+          toggle and browser access); check the device's input volume in Windows sound
+          settings; and make sure no hardware mute is on. The meter will move as soon as audio
+          arrives.
+        </p>
+      )}
       {monitoring && (
         <p className="text-xs text-amber-300/90">
           Your microphone is playing back to your output device. Use headphones to avoid
