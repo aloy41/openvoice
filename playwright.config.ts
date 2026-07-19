@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { defineConfig } from "@playwright/test";
 
 // Load OPENVOICE_DEV_AUTH_PASSWORD from .env for local runs (CI sets env vars
@@ -30,6 +31,9 @@ export default defineConfig({
           args: [
             "--use-fake-ui-for-media-stream",
             "--use-fake-device-for-media-stream",
+            // Deterministic non-silent mic input (the built-in fake device is
+            // silent in headless shell): loop a generated 440 Hz tone.
+            `--use-file-for-fake-audio-capture=${resolve(process.cwd(), "tests/e2e/fixtures/tone.wav")}`,
             "--autoplay-policy=no-user-gesture-required",
           ],
         },

@@ -47,7 +47,7 @@ export interface UseVoiceRoom {
   participants: VoiceParticipant[];
   muted: boolean;
   deafened: boolean;
-  join: (micDeviceId?: string) => Promise<void>;
+  join: (micDeviceId?: string, outputDeviceId?: string) => Promise<void>;
   leave: () => Promise<void>;
   toggleMute: () => Promise<void>;
   toggleDeafen: () => Promise<void>;
@@ -125,7 +125,7 @@ export function useVoiceRoom(sessionToken: string): UseVoiceRoom {
   }, []);
 
   const join = useCallback(
-    async (micDeviceId?: string) => {
+    async (micDeviceId?: string, outputDeviceId?: string) => {
       if (roomRef.current) return; // already joined/joining
       setError(null);
       setStatus("requesting-token");
@@ -152,6 +152,7 @@ export function useVoiceRoom(sessionToken: string): UseVoiceRoom {
 
       const room = new Room({
         audioCaptureDefaults: micDeviceId ? { deviceId: micDeviceId } : undefined,
+        audioOutput: outputDeviceId ? { deviceId: outputDeviceId } : undefined,
       });
       roomRef.current = room;
       intentionalLeaveRef.current = false;
