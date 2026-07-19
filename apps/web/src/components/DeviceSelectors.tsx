@@ -58,7 +58,7 @@ export function DeviceSelectors({
         </select>
       </div>
       {mics.some((d) => !d.label) && (
-        <p className="text-xs text-slate-500 sm:col-span-2">
+        <p className="text-xs text-slate-400 sm:col-span-2">
           Device names appear after you grant microphone access (run the mic test or join).
         </p>
       )}

@@ -39,7 +39,11 @@ milestone is transport-encrypted only and the UI must say so.
 - API lint/type: `docker compose -f docker-compose.dev.yml run --rm api sh -c "ruff check . && ruff format --check . && mypy src"`
 - Web: `npm run test -w apps/web`, `npm run typecheck -w apps/web`,
   `npm run lint -w apps/web`, `npm run build -w apps/web`
-- E2E: `npm run test:e2e` (needs the full stack up)
+- E2E: `npm run test:e2e` (needs the full stack up; includes the axe
+  accessibility scan). Gated extras: `RUN_CHAOS=1` (SFU-restart recovery,
+  controls Docker) and `SOAK_MINUTES=N` (4-client stability soak). Do not run
+  other e2e specs while a soak is running — they share the dev-lobby room and
+  will break its participant-count assertions.
 
 The API runs in Docker on Python 3.12 (host Python may be older — do not
 develop against a host interpreter below 3.12; see ADR-0002).

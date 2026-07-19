@@ -102,9 +102,14 @@ npm run typecheck -w apps/web
 npm run lint -w apps/web
 npm run build -w apps/web
 
-# Two-client end-to-end voice smoke test (requires the full dev stack up)
-npm run test:e2e
+# End-to-end tests (require the full dev stack up)
+npm run test:e2e                                   # two-client voice smoke + axe accessibility
+$env:RUN_CHAOS="1"; npx playwright test reconnect-chaos   # SFU-restart recovery (controls Docker)
+$env:SOAK_MINUTES="60"; npx playwright test soak          # 4-client stability soak
 ```
+
+Verified results for each gate are recorded in
+[`docs/operations/verification-log.md`](docs/operations/verification-log.md).
 
 ## Regenerating the API client
 

@@ -27,7 +27,7 @@ export function ParticipantList({
           />
           <span className="min-w-0 flex-1 truncate text-sm">
             {p.name}
-            {p.isLocal && <span className="text-slate-500"> (you)</span>}
+            {p.isLocal && <span className="text-slate-400"> (you)</span>}
           </span>
           {p.speaking && <span className="sr-only">speaking</span>}
           {p.micMuted && (
