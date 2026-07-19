@@ -1,26 +1,21 @@
 /**
  * Audio feedback regression tests.
  *
- * The mic test must show a live input level (Chromium's fake device emits a
- * tone) and must KEEP running after first use — granting permission refreshes
- * the device list and changes the selected device id, which previously
- * self-stopped the test and made it look like the mic was dead.
+ * The mic test must show a live input level (Chromium's fake capture file is
+ * a 440 Hz tone) and must KEEP running after first use — granting permission
+ * refreshes the device list and changes the selected device id, which
+ * previously self-stopped the test and made it look like the mic was dead.
  */
 import { expect, test } from "@playwright/test";
 
-const DEV_PASSWORD = process.env.OPENVOICE_DEV_AUTH_PASSWORD ?? "";
-
-test.skip(DEV_PASSWORD === "", "OPENVOICE_DEV_AUTH_PASSWORD is not set");
+import { registerAndSignIn } from "./helpers";
 
 test("mic test shows a live level and survives the permission-grant device refresh", async ({
   browser,
 }) => {
   const ctx = await browser.newContext({ permissions: ["microphone"] });
   const page = await ctx.newPage();
-  await page.goto("/");
-  await page.getByLabel("Username").fill("audio-check");
-  await page.getByLabel("Development password").fill(DEV_PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await registerAndSignIn(page, "audio-a");
 
   await page.getByRole("button", { name: "Test microphone" }).click();
 
@@ -45,10 +40,7 @@ test("mic test shows a live level and survives the permission-grant device refre
 test("output test plays a chime without error", async ({ browser }) => {
   const ctx = await browser.newContext({ permissions: ["microphone"] });
   const page = await ctx.newPage();
-  await page.goto("/");
-  await page.getByLabel("Username").fill("audio-check2");
-  await page.getByLabel("Development password").fill(DEV_PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await registerAndSignIn(page, "audio-b");
 
   await page.getByRole("button", { name: "Play test sound" }).click();
   // The chime lasts ~0.8 s; the button re-enables when it finishes and no

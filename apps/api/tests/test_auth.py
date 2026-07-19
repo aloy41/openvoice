@@ -81,6 +81,33 @@ async def test_password_is_stored_as_argon2id(client: AsyncClient, clean_db: Non
     assert row is not None and row[0].startswith("$argon2id$")
 
 
+async def test_register_claims_passwordless_dev_account(
+    client: AsyncClient, clean_db: None
+) -> None:
+    dev = await client.post(
+        "/api/v1/dev/session", json={"username": "claimme", "password": "test-dev-password"}
+    )
+    assert dev.status_code == 200
+    dev_user_id = dev.json()["user"]["id"]
+
+    headers = await prime_csrf(client)
+    resp = await client.post(
+        "/api/v1/auth/register",
+        json={"username": "claimme", "password": PASSWORD},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    # same account, now a real one
+    assert resp.json()["user"]["id"] == dev_user_id
+    # and it can never be claimed twice
+    again = await client.post(
+        "/api/v1/auth/register",
+        json={"username": "claimme", "password": "another-password-1"},
+        headers=csrf_headers(client),
+    )
+    assert again.status_code == 409
+
+
 async def test_register_duplicate_username(client: AsyncClient, clean_db: None) -> None:
     await register(client, "carol")
     resp = await client.post(

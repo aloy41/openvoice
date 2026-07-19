@@ -4,8 +4,11 @@ import type { FormEvent } from "react";
 import { useSession } from "../session";
 import { EncryptionNotice } from "./EncryptionNotice";
 
-export function LoginScreen() {
-  const { signIn } = useSession();
+type Mode = "signin" | "signup";
+
+export function AuthScreen() {
+  const { signIn, signUp } = useSession();
+  const [mode, setMode] = useState<Mode>("signin");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -15,21 +18,34 @@ export function LoginScreen() {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const result = await signIn(username.trim(), password);
+    const action = mode === "signin" ? signIn : signUp;
+    const result = await action(username.trim(), password);
     setBusy(false);
     if (result.error) setError(result.error);
+  }
+
+  function switchMode(next: Mode) {
+    setMode(next);
+    setError(null);
   }
 
   return (
     <div className="mx-auto max-w-md space-y-6">
       <EncryptionNotice />
       <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
-        <h2 className="text-base font-semibold">Development sign-in</h2>
+        <h2 className="text-base font-semibold">
+          {mode === "signin" ? "Sign in" : "Create your account"}
+        </h2>
         <p className="mt-1 text-sm text-slate-400">
-          This is a development build. Pick any username and enter this server's development
-          password.
+          {mode === "signin"
+            ? "Welcome back."
+            : "Pick a username and a password of at least 10 characters."}
         </p>
-        <form onSubmit={onSubmit} className="mt-5 space-y-4" aria-label="Development sign-in">
+        <form
+          onSubmit={onSubmit}
+          className="mt-5 space-y-4"
+          aria-label={mode === "signin" ? "Sign in" : "Create account"}
+        >
           <div>
             <label htmlFor="username" className="block text-sm font-medium text-slate-300">
               Username
@@ -49,14 +65,16 @@ export function LoginScreen() {
           </div>
           <div>
             <label htmlFor="password" className="block text-sm font-medium text-slate-300">
-              Development password
+              Password
             </label>
             <input
               id="password"
               name="password"
               type="password"
-              autoComplete="current-password"
+              autoComplete={mode === "signin" ? "current-password" : "new-password"}
               required
+              minLength={mode === "signup" ? 10 : 1}
+              maxLength={128}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
@@ -72,9 +90,38 @@ export function LoginScreen() {
             disabled={busy}
             className="w-full rounded-md bg-sky-700 px-3 py-2 text-sm font-medium text-white hover:bg-sky-800 disabled:opacity-50"
           >
-            {busy ? "Signing in…" : "Sign in"}
+            {busy ? "Working…" : mode === "signin" ? "Sign in" : "Create account"}
           </button>
         </form>
+        <p className="mt-4 text-sm text-slate-400">
+          {mode === "signin" ? (
+            <>
+              New here?{" "}
+              <button
+                onClick={() => switchMode("signup")}
+                className="font-medium text-sky-400 hover:underline"
+              >
+                Create an account
+              </button>
+            </>
+          ) : (
+            <>
+              Already have an account?{" "}
+              <button
+                onClick={() => switchMode("signin")}
+                className="font-medium text-sky-400 hover:underline"
+              >
+                Sign in
+              </button>
+            </>
+          )}
+        </p>
+        {mode === "signup" && (
+          <p className="mt-3 text-xs text-amber-300/80">
+            Heads up: password recovery does not exist yet — there is no email on file. If you
+            lose this password, the account cannot be recovered.
+          </p>
+        )}
       </div>
     </div>
   );

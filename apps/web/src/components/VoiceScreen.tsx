@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Room } from "livekit-client";
 
-import type { Session } from "../session";
 import { useVoiceRoom } from "../voice/useVoiceRoom";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { DeviceSelectors } from "./DeviceSelectors";
@@ -11,8 +10,8 @@ import { OutputTest } from "./OutputTest";
 import { ParticipantList } from "./ParticipantList";
 import { VoiceControls } from "./VoiceControls";
 
-export function VoiceScreen({ session }: { session: Session }) {
-  const voice = useVoiceRoom(session.token);
+export function VoiceScreen() {
+  const voice = useVoiceRoom();
   const [mics, setMics] = useState<MediaDeviceInfo[]>([]);
   const [outputs, setOutputs] = useState<MediaDeviceInfo[]>([]);
   const [selectedMic, setSelectedMic] = useState("");

@@ -58,7 +58,7 @@ export interface UseVoiceRoom {
   audioContainerRef: (el: HTMLDivElement | null) => void;
 }
 
-export function useVoiceRoom(sessionToken: string): UseVoiceRoom {
+export function useVoiceRoom(): UseVoiceRoom {
   const [status, setStatus] = useState<VoiceStatus>("idle");
   const [error, setError] = useState<VoiceErrorInfo | null>(null);
   const [roomName, setRoomName] = useState<string | null>(null);
@@ -132,9 +132,9 @@ export function useVoiceRoom(sessionToken: string): UseVoiceRoom {
 
       let grant: { token: string; ws_url: string; room: string };
       try {
-        const { data, error: apiError } = await api.POST("/api/v1/dev/voice-token", {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
+        // Authenticated by the session cookie; CSRF header added by the
+        // client middleware.
+        const { data, error: apiError } = await api.POST("/api/v1/dev/voice-token");
         if (apiError || !data) {
           setError(describeTokenError((apiError as { code?: string } | null)?.code));
           setStatus("idle");
@@ -215,7 +215,7 @@ export function useVoiceRoom(sessionToken: string): UseVoiceRoom {
       setStatus("connected");
       syncParticipants();
     },
-    [applyVolume, cleanupRoom, sessionToken, syncParticipants],
+    [applyVolume, cleanupRoom, syncParticipants],
   );
 
   const leave = useCallback(async () => {
