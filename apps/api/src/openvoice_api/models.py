@@ -175,6 +175,8 @@ class Channel(Base):
     )
     kind: Mapped[str] = mapped_column(String(16), nullable=False)  # category | text | voice
     name: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Optional channel topic/description shown in the channel header.
+    topic: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     position: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     parent_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("channels.id", ondelete="SET NULL"), nullable=True
@@ -299,6 +301,19 @@ class Message(Base):
         String(24), nullable=False, server_default=text("'plaintext'")
     )
     content: Mapped[str] = mapped_column(String(8000), nullable=False)
+    # Optional reply target (threading-lite). SET NULL so deleting the parent
+    # never cascades away replies; the reply just loses its link.
+    reply_to_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("messages.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # Pin state: pinned_at set + pinned_by names the moderator who pinned it.
+    pinned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    pinned_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

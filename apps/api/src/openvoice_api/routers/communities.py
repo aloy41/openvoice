@@ -45,6 +45,7 @@ class ChannelOut(BaseModel):
     id: uuid.UUID
     kind: str
     name: str
+    topic: str | None
     position: int
     parent_id: uuid.UUID | None
     capabilities: list[str]
@@ -63,11 +64,13 @@ class CommunityListOut(BaseModel):
 class ChannelCreate(BaseModel):
     name: str = Field(min_length=1, max_length=64)
     kind: str = Field(pattern="^(category|text|voice)$")
+    topic: str | None = Field(default=None, max_length=1024)
     parent_id: uuid.UUID | None = None
 
 
 class ChannelPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=64)
+    topic: str | None = Field(default=None, max_length=1024)
     position: int | None = Field(default=None, ge=0, le=10_000)
 
 
@@ -204,6 +207,7 @@ async def _detail(request: Request, community_id: uuid.UUID) -> CommunityDetail:
                     id=channel.id,
                     kind=channel.kind,
                     name=channel.name,
+                    topic=channel.topic,
                     position=channel.position,
                     parent_id=channel.parent_id,
                     capabilities=capability_names(caps),
@@ -322,6 +326,7 @@ async def create_channel(
             community_id=community_id,
             kind=body.kind,
             name=body.name,
+            topic=body.topic,
             parent_id=body.parent_id,
         )
         db.add(channel)
@@ -343,6 +348,7 @@ async def create_channel(
             id=channel.id,
             kind=channel.kind,
             name=channel.name,
+            topic=channel.topic,
             position=channel.position,
             parent_id=channel.parent_id,
             capabilities=capability_names(access.base_permissions),
@@ -374,6 +380,9 @@ async def update_channel(channel_id: uuid.UUID, body: ChannelPatch, request: Req
         if body.name is not None:
             changes["name"] = {"from": channel.name, "to": body.name}
             channel.name = body.name
+        if body.topic is not None:
+            changes["topic"] = True  # value omitted from the audit log
+            channel.topic = body.topic or None
         if body.position is not None:
             channel.position = body.position
         record_audit(
@@ -393,6 +402,7 @@ async def update_channel(channel_id: uuid.UUID, body: ChannelPatch, request: Req
             id=channel.id,
             kind=channel.kind,
             name=channel.name,
+            topic=channel.topic,
             position=channel.position,
             parent_id=channel.parent_id,
             capabilities=capability_names(access.base_permissions),

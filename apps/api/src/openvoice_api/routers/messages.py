@@ -51,6 +51,8 @@ CONTENT_MAX = 8000
 class MessageCreate(BaseModel):
     content: str = Field(min_length=1, max_length=CONTENT_MAX)
     scheme: str = Field(default="plaintext", pattern="^(plaintext|passphrase-v1)$")
+    # Optional reply target: must be a live message in the SAME channel.
+    reply_to_id: uuid.UUID | None = None
 
 
 class MessagePatch(BaseModel):
@@ -69,6 +71,13 @@ class ReactionAdd(BaseModel):
     emoji: str = Field(min_length=1, max_length=16)
 
 
+class ReplyPreview(BaseModel):
+    id: uuid.UUID
+    author_name: str
+    content: str  # snippet for display; empty when the parent was deleted
+    deleted: bool
+
+
 class MessageOut(BaseModel):
     id: uuid.UUID
     channel_id: uuid.UUID
@@ -81,6 +90,11 @@ class MessageOut(BaseModel):
     edited_at: datetime | None
     deleted: bool
     reactions: list[ReactionOut] = []
+    reply_to: ReplyPreview | None = None
+    pinned: bool = False
+
+
+PREVIEW_LEN = 140
 
 
 class MessageListOut(BaseModel):
@@ -100,6 +114,7 @@ def _message_out(
     author_name: str,
     author_color: str | None,
     reactions: list[ReactionOut] | None = None,
+    reply_to: ReplyPreview | None = None,
 ) -> MessageOut:
     deleted = message.deleted_at is not None
     return MessageOut(
@@ -114,7 +129,35 @@ def _message_out(
         edited_at=message.edited_at,
         deleted=deleted,
         reactions=reactions or [],
+        reply_to=reply_to,
+        pinned=message.pinned_at is not None,
     )
+
+
+async def _reply_previews(
+    db: AsyncSession, reply_to_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, ReplyPreview]:
+    """Batch-resolve reply targets to compact previews (id, author, snippet)."""
+    ids = [i for i in reply_to_ids if i is not None]
+    if not ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(Message, User.display_name)
+            .join(User, User.id == Message.author_id)
+            .where(Message.id.in_(ids))
+        )
+    ).all()
+    previews: dict[uuid.UUID, ReplyPreview] = {}
+    for m, name in rows:
+        deleted = m.deleted_at is not None
+        previews[m.id] = ReplyPreview(
+            id=m.id,
+            author_name=name,
+            content="" if deleted else m.content[:PREVIEW_LEN],
+            deleted=deleted,
+        )
+    return previews
 
 
 async def _reactions_for(
@@ -178,8 +221,16 @@ async def list_messages(
         has_more = len(rows) > PAGE_SIZE
         rows = rows[:PAGE_SIZE]
         reactions = await _reactions_for(db, [m.id for m, _n, _c in rows])
+        previews = await _reply_previews(db, [m.reply_to_id for m, _n, _c in rows])
     messages = [
-        _message_out(m, name, color, reactions.get(m.id, [])) for m, name, color in reversed(rows)
+        _message_out(
+            m,
+            name,
+            color,
+            reactions.get(m.id, []),
+            previews.get(m.reply_to_id) if m.reply_to_id else None,
+        )
+        for m, name, color in reversed(rows)
     ]
     return MessageListOut(
         messages=messages,
@@ -215,15 +266,34 @@ async def send_message(channel_id: uuid.UUID, body: MessageCreate, request: Requ
                     "capability": "SEND_MESSAGES",
                 },
             )
+        reply_to: ReplyPreview | None = None
+        if body.reply_to_id is not None:
+            parent = (
+                await db.execute(
+                    select(Message).where(
+                        Message.id == body.reply_to_id, Message.channel_id == channel_id
+                    )
+                )
+            ).scalar_one_or_none()
+            if parent is None or parent.deleted_at is not None:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "code": "invalid_reply_target",
+                        "message": "You can only reply to a live message in this channel.",
+                    },
+                )
+            reply_to = (await _reply_previews(db, [parent.id])).get(parent.id)
         message = Message(
             channel_id=channel_id,
             author_id=ctx.user.id,
             content=body.content,
             scheme=body.scheme,
+            reply_to_id=body.reply_to_id,
         )
         db.add(message)
         await db.flush()
-        out = _message_out(message, ctx.user.display_name, ctx.user.accent_color)
+        out = _message_out(message, ctx.user.display_name, ctx.user.accent_color, reply_to=reply_to)
         envelope = await append_event(
             db,
             channel.community_id,
@@ -282,7 +352,12 @@ async def edit_message(message_id: uuid.UUID, body: MessagePatch, request: Reque
         message.content = body.content
         message.scheme = body.scheme
         message.edited_at = datetime.now(tz=UTC)
-        out = _message_out(message, ctx.user.display_name, ctx.user.accent_color)
+        reply_to = (
+            (await _reply_previews(db, [message.reply_to_id])).get(message.reply_to_id)
+            if message.reply_to_id
+            else None
+        )
+        out = _message_out(message, ctx.user.display_name, ctx.user.accent_color, reply_to=reply_to)
         envelope = await append_event(
             db,
             channel.community_id,
@@ -372,6 +447,109 @@ async def toggle_reaction(
         await db.commit()
     await publish_event(request.app.state.redis, envelope)
     return reactions
+
+
+class PinListOut(BaseModel):
+    messages: list[MessageOut]
+
+
+async def _set_pin(message_id: uuid.UUID, request: Request, *, pinned: bool) -> MessageOut:
+    ctx = await authenticate_unsafe(request)
+    async with request.app.state.sessionmaker() as db:
+        message = (
+            await db.execute(select(Message).where(Message.id == message_id).with_for_update())
+        ).scalar_one_or_none()
+        if message is None or message.deleted_at is not None:
+            raise not_found()
+        channel = (
+            await db.execute(select(Channel).where(Channel.id == message.channel_id))
+        ).scalar_one()
+        access = await load_access(db, channel.community_id, ctx.user)
+        caps = await resolve_channel_capabilities(db, access, channel)
+        if not caps & Capability.MANAGE_MESSAGES:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "missing_permission",
+                    "message": "You need the MANAGE_MESSAGES permission to pin messages.",
+                    "capability": "MANAGE_MESSAGES",
+                },
+            )
+        message.pinned_at = datetime.now(tz=UTC) if pinned else None
+        message.pinned_by = ctx.user.id if pinned else None
+        author = (
+            await db.execute(
+                select(User.display_name, User.accent_color).where(User.id == message.author_id)
+            )
+        ).first()
+        author_name = author[0] if author else "unknown"
+        author_color = author[1] if author else None
+        reply_to = (
+            (await _reply_previews(db, [message.reply_to_id])).get(message.reply_to_id)
+            if message.reply_to_id
+            else None
+        )
+        reactions = (await _reactions_for(db, [message.id])).get(message.id, [])
+        out = _message_out(message, author_name, author_color, reactions, reply_to)
+        # message.updated so every client reflects the new pin state live.
+        envelope = await append_event(
+            db,
+            channel.community_id,
+            "message.updated",
+            {"message": out.model_dump(mode="json")},
+        )
+        await db.commit()
+    await publish_event(request.app.state.redis, envelope)
+    return out
+
+
+@router.put("/messages/{message_id}/pin", response_model=MessageOut)
+async def pin_message(message_id: uuid.UUID, request: Request) -> MessageOut:
+    return await _set_pin(message_id, request, pinned=True)
+
+
+@router.delete("/messages/{message_id}/pin", response_model=MessageOut)
+async def unpin_message(message_id: uuid.UUID, request: Request) -> MessageOut:
+    return await _set_pin(message_id, request, pinned=False)
+
+
+@router.get("/channels/{channel_id}/pins", response_model=PinListOut)
+async def list_pins(channel_id: uuid.UUID, request: Request) -> PinListOut:
+    """Pinned messages in a channel, most-recently-pinned first. Requires
+    VIEW_CHANNELS like reading the channel itself."""
+    ctx = await authenticate(request)
+    async with request.app.state.sessionmaker() as db:
+        channel = await _load_text_channel(db, request, channel_id)
+        access = await load_access(db, channel.community_id, ctx.user)
+        caps = await resolve_channel_capabilities(db, access, channel)
+        if not caps & Capability.VIEW_CHANNELS:
+            raise not_found()
+        rows = (
+            await db.execute(
+                select(Message, User.display_name, User.accent_color)
+                .join(User, User.id == Message.author_id)
+                .where(
+                    Message.channel_id == channel_id,
+                    Message.pinned_at.is_not(None),
+                    Message.deleted_at.is_(None),
+                )
+                .order_by(Message.pinned_at.desc())
+                .limit(200)
+            )
+        ).all()
+        reactions = await _reactions_for(db, [m.id for m, _n, _c in rows])
+        previews = await _reply_previews(db, [m.reply_to_id for m, _n, _c in rows])
+    messages = [
+        _message_out(
+            m,
+            name,
+            color,
+            reactions.get(m.id, []),
+            previews.get(m.reply_to_id) if m.reply_to_id else None,
+        )
+        for m, name, color in rows
+    ]
+    return PinListOut(messages=messages)
 
 
 @router.get("/communities/{community_id}/events", response_model=EventListOut)

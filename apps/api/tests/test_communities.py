@@ -205,6 +205,29 @@ async def test_override_uniqueness_enforced_for_null_target(app: FastAPI, clean_
                 await db.commit()
 
 
+async def test_channel_topic_create_and_edit(app: FastAPI, clean_db: None) -> None:
+    async with user_client(app, uname("owner")) as owner:
+        detail = await create_community(owner)
+        cid = detail["community"]["id"]
+        created = await owner.post(
+            f"/api/v1/communities/{cid}/channels",
+            json={"name": "announcements", "kind": "text", "topic": "Company news only"},
+        )
+        assert created.status_code == 200, created.text
+        channel_id = created.json()["id"]
+        assert created.json()["topic"] == "Company news only"
+
+        edited = await owner.patch(
+            f"/api/v1/channels/{channel_id}", json={"topic": "Updated topic"}
+        )
+        assert edited.status_code == 200 and edited.json()["topic"] == "Updated topic"
+
+        # topic is visible in the community detail.
+        cd = (await owner.get(f"/api/v1/communities/{cid}")).json()
+        chan = next(c for c in cd["channels"] if c["id"] == channel_id)
+        assert chan["topic"] == "Updated topic"
+
+
 async def test_invalid_channel_parent_rejected(app: FastAPI, clean_db: None) -> None:
     async with user_client(app, uname("owner")) as owner:
         detail = await create_community(owner)

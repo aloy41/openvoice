@@ -247,6 +247,18 @@
               }
             ],
             "title": "Parent Id"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic"
           }
         },
         "required": [
@@ -293,12 +305,24 @@
           "position": {
             "title": "Position",
             "type": "integer"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic"
           }
         },
         "required": [
           "id",
           "kind",
           "name",
+          "topic",
           "position",
           "parent_id",
           "capabilities"
@@ -333,6 +357,18 @@
               }
             ],
             "title": "Position"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic"
           }
         },
         "title": "ChannelPatch",
@@ -906,6 +942,18 @@
             "title": "Content",
             "type": "string"
           },
+          "reply_to_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reply To Id"
+          },
           "scheme": {
             "default": "plaintext",
             "pattern": "^(plaintext|passphrase-v1)$",
@@ -1005,6 +1053,11 @@
             "title": "Id",
             "type": "string"
           },
+          "pinned": {
+            "default": false,
+            "title": "Pinned",
+            "type": "boolean"
+          },
           "reactions": {
             "default": [],
             "items": {
@@ -1012,6 +1065,16 @@
             },
             "title": "Reactions",
             "type": "array"
+          },
+          "reply_to": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReplyPreview"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "scheme": {
             "title": "Scheme",
@@ -1096,6 +1159,22 @@
           }
         },
         "title": "OverrideSet",
+        "type": "object"
+      },
+      "PinListOut": {
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/MessageOut"
+            },
+            "title": "Messages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "messages"
+        ],
+        "title": "PinListOut",
         "type": "object"
       },
       "PresenceOut": {
@@ -1301,6 +1380,35 @@
           "password"
         ],
         "title": "RegisterRequest",
+        "type": "object"
+      },
+      "ReplyPreview": {
+        "properties": {
+          "author_name": {
+            "title": "Author Name",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "author_name",
+          "content",
+          "deleted"
+        ],
+        "title": "ReplyPreview",
         "type": "object"
       },
       "RoleCreate": {
@@ -2161,6 +2269,50 @@
         "summary": "Set Override",
         "tags": [
           "roles"
+        ]
+      }
+    },
+    "/api/v1/channels/{channel_id}/pins": {
+      "get": {
+        "description": "Pinned messages in a channel, most-recently-pinned first. Requires\nVIEW_CHANNELS like reading the channel itself.",
+        "operationId": "list_pins_api_v1_channels__channel_id__pins_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "channel_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Channel Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PinListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Pins",
+        "tags": [
+          "messages"
         ]
       }
     },
@@ -3512,6 +3664,90 @@
           }
         },
         "summary": "Edit Message",
+        "tags": [
+          "messages"
+        ]
+      }
+    },
+    "/api/v1/messages/{message_id}/pin": {
+      "delete": {
+        "operationId": "unpin_message_api_v1_messages__message_id__pin_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Message Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unpin Message",
+        "tags": [
+          "messages"
+        ]
+      },
+      "put": {
+        "operationId": "pin_message_api_v1_messages__message_id__pin_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Message Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pin Message",
         "tags": [
           "messages"
         ]

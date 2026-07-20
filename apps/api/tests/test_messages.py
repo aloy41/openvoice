@@ -193,6 +193,83 @@ async def test_retention_prunes_events_older_than_window(app: FastAPI, clean_db:
         assert not any("old message" in r.payload["message"]["content"] for r in fresh)
 
 
+async def test_reply_to_message(app: FastAPI, clean_db: None) -> None:
+    async with user_client(app, uname("owner")) as owner:
+        detail = await create_community(owner)
+        cid = detail["community"]["id"]
+        channel_id = await text_channel_of(owner, cid)
+        parent = await send(owner, channel_id, "the original")
+
+        reply = await owner.post(
+            f"/api/v1/channels/{channel_id}/messages",
+            json={"content": "a reply", "reply_to_id": parent["id"]},
+        )
+        assert reply.status_code == 200, reply.text
+        body = reply.json()
+        assert body["reply_to"]["id"] == parent["id"]
+        assert body["reply_to"]["content"] == "the original"
+        assert body["reply_to"]["deleted"] is False
+
+        # the reply preview also comes back when listing.
+        listing = (await owner.get(f"/api/v1/channels/{channel_id}/messages")).json()
+        replied = next(m for m in listing["messages"] if m["id"] == body["id"])
+        assert replied["reply_to"]["id"] == parent["id"]
+
+        # replying to a non-existent message is refused.
+        import uuid as _uuid
+
+        bad = await owner.post(
+            f"/api/v1/channels/{channel_id}/messages",
+            json={"content": "x", "reply_to_id": str(_uuid.uuid4())},
+        )
+        assert bad.status_code == 422 and bad.json()["code"] == "invalid_reply_target"
+
+
+async def test_reply_target_must_be_same_channel(app: FastAPI, clean_db: None) -> None:
+    async with user_client(app, uname("owner")) as owner:
+        detail = await create_community(owner)
+        cid = detail["community"]["id"]
+        chan_a = await text_channel_of(owner, cid)
+        chan_b = (
+            await owner.post(
+                f"/api/v1/communities/{cid}/channels", json={"name": "other", "kind": "text"}
+            )
+        ).json()["id"]
+        msg_a = await send(owner, chan_a, "in A")
+        cross = await owner.post(
+            f"/api/v1/channels/{chan_b}/messages",
+            json={"content": "reply from B", "reply_to_id": msg_a["id"]},
+        )
+        assert cross.status_code == 422 and cross.json()["code"] == "invalid_reply_target"
+
+
+async def test_pin_and_unpin(app: FastAPI, clean_db: None) -> None:
+    async with (
+        user_client(app, uname("owner")) as owner,
+        user_client(app, uname("member")) as member,
+    ):
+        detail = await create_community(owner)
+        cid = detail["community"]["id"]
+        code = await make_invite(owner, cid)
+        assert (await member.post("/api/v1/invites/redeem", json={"code": code})).status_code == 200
+        channel_id = await text_channel_of(owner, cid)
+        msg = await send(owner, channel_id, "pin me")
+
+        # a plain member (no MANAGE_MESSAGES) cannot pin.
+        denied = await member.put(f"/api/v1/messages/{msg['id']}/pin")
+        assert denied.status_code == 403 and denied.json()["capability"] == "MANAGE_MESSAGES"
+
+        pinned = await owner.put(f"/api/v1/messages/{msg['id']}/pin")
+        assert pinned.status_code == 200 and pinned.json()["pinned"] is True
+
+        pins = (await member.get(f"/api/v1/channels/{channel_id}/pins")).json()["messages"]
+        assert [m["id"] for m in pins] == [msg["id"]]
+
+        unpinned = await owner.delete(f"/api/v1/messages/{msg['id']}/pin")
+        assert unpinned.status_code == 200 and unpinned.json()["pinned"] is False
+        assert (await owner.get(f"/api/v1/channels/{channel_id}/pins")).json()["messages"] == []
+
+
 async def test_manage_messages_moderator_delete(app: FastAPI, clean_db: None) -> None:
     async with (
         user_client(app, uname("owner")) as owner,

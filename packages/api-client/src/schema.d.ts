@@ -215,6 +215,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/channels/{channel_id}/pins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Pins
+         * @description Pinned messages in a channel, most-recently-pinned first. Requires
+         *     VIEW_CHANNELS like reading the channel itself.
+         */
+        get: operations["list_pins_api_v1_channels__channel_id__pins_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/channels/{channel_id}/voice-token": {
         parameters: {
             query?: never;
@@ -615,6 +636,24 @@ export interface paths {
         patch: operations["edit_message_api_v1_messages__message_id__patch"];
         trace?: never;
     };
+    "/api/v1/messages/{message_id}/pin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Pin Message */
+        put: operations["pin_message_api_v1_messages__message_id__pin_put"];
+        post?: never;
+        /** Unpin Message */
+        delete: operations["unpin_message_api_v1_messages__message_id__pin_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/messages/{message_id}/reactions": {
         parameters: {
             query?: never;
@@ -773,6 +812,8 @@ export interface components {
             name: string;
             /** Parent Id */
             parent_id?: string | null;
+            /** Topic */
+            topic?: string | null;
         };
         /** ChannelOut */
         ChannelOut: {
@@ -791,6 +832,8 @@ export interface components {
             parent_id: string | null;
             /** Position */
             position: number;
+            /** Topic */
+            topic: string | null;
         };
         /** ChannelPatch */
         ChannelPatch: {
@@ -798,6 +841,8 @@ export interface components {
             name?: string | null;
             /** Position */
             position?: number | null;
+            /** Topic */
+            topic?: string | null;
         };
         /** CommunityCreate */
         CommunityCreate: {
@@ -1007,6 +1052,8 @@ export interface components {
         MessageCreate: {
             /** Content */
             content: string;
+            /** Reply To Id */
+            reply_to_id?: string | null;
             /**
              * Scheme
              * @default plaintext
@@ -1053,10 +1100,16 @@ export interface components {
              */
             id: string;
             /**
+             * Pinned
+             * @default false
+             */
+            pinned: boolean;
+            /**
              * Reactions
              * @default []
              */
             reactions: components["schemas"]["ReactionOut"][];
+            reply_to?: components["schemas"]["ReplyPreview"] | null;
             /** Scheme */
             scheme: string;
         };
@@ -1086,6 +1139,11 @@ export interface components {
             role_id?: string | null;
             /** User Id */
             user_id?: string | null;
+        };
+        /** PinListOut */
+        PinListOut: {
+            /** Messages */
+            messages: components["schemas"]["MessageOut"][];
         };
         /** PresenceOut */
         PresenceOut: {
@@ -1141,6 +1199,20 @@ export interface components {
             password: string;
             /** Username */
             username: string;
+        };
+        /** ReplyPreview */
+        ReplyPreview: {
+            /** Author Name */
+            author_name: string;
+            /** Content */
+            content: string;
+            /** Deleted */
+            deleted: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
         };
         /** RoleCreate */
         RoleCreate: {
@@ -1657,6 +1729,37 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_pins_api_v1_channels__channel_id__pins_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channel_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PinListOut"];
                 };
             };
             /** @description Validation Error */
@@ -2595,6 +2698,68 @@ export interface operations {
                 "application/json": components["schemas"]["MessagePatch"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pin_message_api_v1_messages__message_id__pin_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unpin_message_api_v1_messages__message_id__pin_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
