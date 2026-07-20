@@ -374,3 +374,50 @@ audio-only publish grant hardening, invite-redemption race, override
 uniqueness, expired-ban behavior, moderation hierarchy) is tracked, not yet
 fixed. An independent security review is still required before a public
 release.
+
+## 2026-07-20 — Technical-debt sweep + media workflow structure
+
+**Hardware/OS:** as above (Ryzen 9 7900X, Docker Desktop, loopback network).
+
+Cleared the tracked lower-severity debt:
+
+- **roles GET/CSRF:** `GET /communities/{id}/roles` used `authenticate_unsafe`
+  (CSRF-required) on a read — switched to `authenticate`. Test:
+  `test_list_roles_is_a_safe_get_without_csrf`.
+- **audio-only publish grant:** LiveKit tokens now set
+  `can_publish_sources=["microphone"]`, so even a SPEAK token can publish only
+  a mic track (no camera/screen share). Asserted in `test_voice_token`.
+- **invite redemption race:** the invite row is loaded `FOR UPDATE`, making the
+  max_uses check-and-increment atomic against concurrent redeemers.
+- **override uniqueness with NULLs:** migration 0010 replaces the ineffective
+  `UNIQUE(channel_id, role_id, membership_id)` with two PARTIAL unique indexes
+  (one per target kind). Test: `test_override_uniqueness_enforced_for_null_target`.
+- **expired-ban behavior:** an expired ban no longer blocks re-banning (409) —
+  it is refreshed in place. Test: `test_reban_after_ban_expires`.
+- **moderation hierarchy:** kick/ban now require the actor to strictly outrank
+  the target's top role (owner bypasses). Test:
+  `test_moderation_respects_role_hierarchy`.
+
+Also: message edit/delete already take `FOR UPDATE` (prior pass); the media
+workflow steps now use `if: ${{ !cancelled() && ... }}` so a failing suite no
+longer skips the others (one run reports voice/relay/chaos together).
+
+| Check | Result |
+| --- | --- |
+| API: ruff lint + format, mypy --strict | clean (30 source files) |
+| API: pytest (real PostgreSQL/Redis) | 110/110 passed |
+| Migration 0010 (partial override indexes) | applied |
+| OpenAPI contract | no drift |
+
+**Media workflow reality (blocker 4):** a manual run of `e2e-full` showed
+**voice E2EE + media-flow + voice-smoke PASS** on the shared runner, but the
+**TURN relay-only test FAILS** there — the client never reaches "Connected"
+because loopback relay ICE does not complete on GitHub-hosted runners (TURN
+server starts and issues credentials; the media path just cannot complete).
+This is the documented shared-runner limitation: TURN relay and reconnect-chaos
+require a real media host (self-hosted runner via `E2E_RUNNER`). Voice E2EE is
+now genuinely verified; TURN relay and chaos remain **unverified** pending a
+real host.
+
+**Still requires a human:** an independent security review before any public
+release. This cannot be self-provided.

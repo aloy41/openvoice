@@ -85,19 +85,18 @@ jobs:
           done
           echo "stack did not become ready"; docker compose -f docker-compose.dev.yml logs; exit 1
 
+      # Each suite runs independently: !cancelled() means a failure in one does
+      # NOT skip the others, so a single run reports voice / relay / chaos
+      # results together instead of stopping at the first failure.
       - name: Voice E2EE + media-flow
-        if: >-
-          github.event_name == 'schedule' ||
-          inputs.run_voice == true
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.run_voice == true) }}
         env:
           RUN_VOICE_E2E: "1"
           OPENVOICE_DEV_AUTH_PASSWORD: ${{ env.CI_DEV_PASSWORD }}
         run: npx playwright test e2ee media-flow voice-smoke
 
       - name: TURN relay-only call
-        if: >-
-          github.event_name == 'schedule' ||
-          inputs.run_relay == true
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.run_relay == true) }}
         env:
           RUN_RELAY: "1"
           LIVEKIT_NODE_IP: "127.0.0.1"
@@ -105,9 +104,7 @@ jobs:
         run: npx playwright test relay
 
       - name: Reconnect chaos (SFU restart)
-        if: >-
-          github.event_name == 'schedule' ||
-          inputs.run_chaos == true
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.run_chaos == true) }}
         env:
           RUN_CHAOS: "1"
           LIVEKIT_CONTAINER: openvoice-dev-livekit-1
@@ -115,9 +112,7 @@ jobs:
         run: npx playwright test reconnect-chaos
 
       - name: Soak (long-running stability)
-        if: >-
-          github.event_name == 'workflow_dispatch' &&
-          inputs.soak_minutes != '0' && inputs.soak_minutes != ''
+        if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.soak_minutes != '0' && inputs.soak_minutes != '' }}
         env:
           SOAK_MINUTES: ${{ inputs.soak_minutes }}
           OPENVOICE_DEV_AUTH_PASSWORD: ${{ env.CI_DEV_PASSWORD }}

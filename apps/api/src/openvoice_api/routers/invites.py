@@ -124,8 +124,13 @@ async def redeem_invite(body: InviteRedeem, request: Request) -> InviteRedeemed:
 
     now = datetime.now(tz=UTC)
     async with request.app.state.sessionmaker() as db:
+        # FOR UPDATE serializes concurrent redemptions of the same invite so the
+        # max_uses check-and-increment is atomic: without it, two redeemers can
+        # both read uses < max_uses and both join, exceeding the limit.
         invite = (
-            await db.execute(select(Invite).where(Invite.code_hash == _hash_code(body.code)))
+            await db.execute(
+                select(Invite).where(Invite.code_hash == _hash_code(body.code)).with_for_update()
+            )
         ).scalar_one_or_none()
         if (
             invite is None

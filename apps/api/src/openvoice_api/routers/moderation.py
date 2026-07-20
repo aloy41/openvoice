@@ -12,11 +12,12 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..authz import load_access, not_found, record_audit
+from ..authz import CommunityAccess, load_access, not_found, record_audit
 from ..deps import authenticate, authenticate_unsafe
 from ..events import append_event, publish_event
-from ..models import Ban, Membership, User
+from ..models import Ban, MemberRole, Membership, Role, User
 from ..permissions import Capability
 
 router = APIRouter(tags=["moderation"])
@@ -81,6 +82,53 @@ def _protect_target(access_owner_id: uuid.UUID, actor_id: uuid.UUID, target_id: 
         )
 
 
+async def _target_top_role_position(
+    db: AsyncSession, community_id: uuid.UUID, target_user_id: uuid.UUID
+) -> int:
+    """The highest role position held by the target in this community (0 if
+    they hold only @everyone or are not a member)."""
+    membership = (
+        await db.execute(
+            select(Membership).where(
+                Membership.community_id == community_id, Membership.user_id == target_user_id
+            )
+        )
+    ).scalar_one_or_none()
+    if membership is None:
+        return 0
+    positions = (
+        (
+            await db.execute(
+                select(Role.position)
+                .join(MemberRole, MemberRole.role_id == Role.id)
+                .where(MemberRole.membership_id == membership.id, Role.community_id == community_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return max(positions, default=0)
+
+
+async def _require_outranks(
+    db: AsyncSession, access: CommunityAccess, target_user_id: uuid.UUID
+) -> None:
+    """Moderation hierarchy: only the owner, or a moderator strictly above the
+    target's top role, may act on them. Prevents a lower/equal-ranked moderator
+    from kicking or banning a peer or a senior."""
+    if access.is_owner:
+        return
+    target_top = await _target_top_role_position(db, access.community.id, target_user_id)
+    if access.top_role_position <= target_top:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "insufficient_role",
+                "message": "You cannot moderate a member with an equal or higher role.",
+            },
+        )
+
+
 @router.get("/communities/{community_id}/members", response_model=MemberListOut)
 async def list_members(community_id: uuid.UUID, request: Request) -> MemberListOut:
     ctx = await authenticate(request)
@@ -119,6 +167,7 @@ async def kick_member(
         access = await load_access(db, community_id, ctx.user)
         access.require(Capability.KICK_MEMBERS)
         _protect_target(access.community.owner_id, ctx.user.id, user_id)
+        await _require_outranks(db, access, user_id)
         membership = (
             await db.execute(
                 select(Membership).where(
@@ -153,6 +202,7 @@ async def ban_member(community_id: uuid.UUID, body: BanCreate, request: Request)
         access = await load_access(db, community_id, ctx.user)
         access.require(Capability.BAN_MEMBERS)
         _protect_target(access.community.owner_id, ctx.user.id, body.user_id)
+        await _require_outranks(db, access, body.user_id)
         target = (
             await db.execute(select(User).where(User.id == body.user_id))
         ).scalar_one_or_none()
@@ -163,20 +213,34 @@ async def ban_member(community_id: uuid.UUID, body: BanCreate, request: Request)
                 select(Ban).where(Ban.community_id == community_id, Ban.user_id == body.user_id)
             )
         ).scalar_one_or_none()
-        if existing_ban is not None:
+        # Only an ACTIVE ban is a conflict. An expired ban row is stale — allow
+        # re-banning by refreshing it in place (the unique constraint on
+        # (community_id, user_id) would otherwise reject a fresh insert).
+        ban_is_active = existing_ban is not None and (
+            existing_ban.expires_at is None or existing_ban.expires_at > now
+        )
+        if ban_is_active:
             raise HTTPException(
                 status_code=409,
                 detail={"code": "already_banned", "message": "That user is already banned."},
             )
         expires_at = now + timedelta(hours=body.expires_in_hours) if body.expires_in_hours else None
-        ban = Ban(
-            community_id=community_id,
-            user_id=body.user_id,
-            actor_user_id=ctx.user.id,
-            reason=body.reason,
-            expires_at=expires_at,
-        )
-        db.add(ban)
+        if existing_ban is not None:
+            # Refresh the expired ban rather than inserting a duplicate.
+            existing_ban.actor_user_id = ctx.user.id
+            existing_ban.reason = body.reason
+            existing_ban.expires_at = expires_at
+            existing_ban.created_at = now
+            ban = existing_ban
+        else:
+            ban = Ban(
+                community_id=community_id,
+                user_id=body.user_id,
+                actor_user_id=ctx.user.id,
+                reason=body.reason,
+                expires_at=expires_at,
+            )
+            db.add(ban)
         membership = (
             await db.execute(
                 select(Membership).where(

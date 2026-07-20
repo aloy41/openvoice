@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
@@ -158,6 +159,50 @@ async def test_rename_community(app: FastAPI, clean_db: None) -> None:
         assert (await member.get(f"/api/v1/communities/{cid}")).json()["community"][
             "name"
         ] == "Renamed HQ"
+
+
+async def test_list_roles_is_a_safe_get_without_csrf(app: FastAPI, clean_db: None) -> None:
+    """GET /roles is a read: it must not require a CSRF token (a client that
+    hasn't echoed the CSRF header can still list roles)."""
+    async with user_client(app, uname("owner")) as owner:
+        detail = await create_community(owner)
+        cid = detail["community"]["id"]
+        owner.headers.pop("x-csrf-token", None)  # simulate no CSRF header on a GET
+        resp = await owner.get(f"/api/v1/communities/{cid}/roles")
+        assert resp.status_code == 200, resp.text
+        assert any(r["is_everyone"] for r in resp.json()["roles"])
+
+
+async def test_override_uniqueness_enforced_for_null_target(app: FastAPI, clean_db: None) -> None:
+    """The partial unique indexes (migration 0010) must reject a duplicate
+    override for the same (channel, role) even though membership_id is NULL —
+    a plain UNIQUE over the three columns would not."""
+    import uuid as _uuid
+
+    from sqlalchemy.exc import IntegrityError
+
+    from openvoice_api.models import PermissionOverride
+
+    async with user_client(app, uname("owner")) as owner:
+        detail = await create_community(owner)
+        cid = detail["community"]["id"]
+        channel = next(c for c in detail["channels"] if c["kind"] == "text")["id"]
+        roles = (await owner.get(f"/api/v1/communities/{cid}/roles")).json()["roles"]
+        everyone = next(r for r in roles if r["is_everyone"])["id"]
+
+        async with app.state.sessionmaker() as db:
+            db.add(
+                PermissionOverride(
+                    channel_id=_uuid.UUID(channel), role_id=_uuid.UUID(everyone), allow=1, deny=0
+                )
+            )
+            db.add(
+                PermissionOverride(
+                    channel_id=_uuid.UUID(channel), role_id=_uuid.UUID(everyone), allow=0, deny=1
+                )
+            )
+            with pytest.raises(IntegrityError):
+                await db.commit()
 
 
 async def test_invalid_channel_parent_rejected(app: FastAPI, clean_db: None) -> None:

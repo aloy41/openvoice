@@ -44,6 +44,8 @@ async def test_voice_token_grants_are_tightly_scoped(client: AsyncClient, clean_
     assert video["room"] == "dev-lobby"
     assert video["canPublish"] is True
     assert video["canSubscribe"] is True
+    # Publishing is restricted to a microphone track — no camera/screen share.
+    assert video.get("canPublishSources") == ["microphone"]
     # privileged grants must be absent or false
     assert not video.get("roomAdmin")
     assert not video.get("roomCreate")

@@ -11,6 +11,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     UniqueConstraint,
@@ -188,7 +189,26 @@ class PermissionOverride(Base):
     Exactly one of role_id / membership_id is set (DB CHECK constraint)."""
 
     __tablename__ = "permission_overrides"
-    __table_args__ = (UniqueConstraint("channel_id", "role_id", "membership_id"),)
+    # Exactly one of role_id/membership_id is set (CHECK). Two PARTIAL unique
+    # indexes enforce one override per target — a plain UNIQUE over all three
+    # columns is ineffective because Postgres treats the NULL target as
+    # distinct (see migration 0010).
+    __table_args__ = (
+        Index(
+            "uq_override_channel_role",
+            "channel_id",
+            "role_id",
+            unique=True,
+            postgresql_where=text("membership_id IS NULL"),
+        ),
+        Index(
+            "uq_override_channel_member",
+            "channel_id",
+            "membership_id",
+            unique=True,
+            postgresql_where=text("role_id IS NULL"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     channel_id: Mapped[uuid.UUID] = mapped_column(

@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from ..authz import CommunityAccess, load_access, not_found, record_audit
-from ..deps import authenticate_unsafe
+from ..deps import authenticate, authenticate_unsafe
 from ..events import append_event, publish_event
 from ..models import Channel, MemberRole, Membership, PermissionOverride, Role
 from ..permissions import ALL_CAPABILITIES, Capability, capability_names
@@ -78,7 +78,9 @@ def _role_out(role: Role) -> RoleOut:
 
 @router.get("/communities/{community_id}/roles", response_model=RoleListOut)
 async def list_roles(community_id: uuid.UUID, request: Request) -> RoleListOut:
-    ctx = await authenticate_unsafe(request)
+    # GET is a safe method: authenticate WITHOUT requiring a CSRF token (a
+    # read must not fail for a client that hasn't echoed the CSRF header).
+    ctx = await authenticate(request)
     async with request.app.state.sessionmaker() as db:
         await load_access(db, community_id, ctx.user)
         roles = (

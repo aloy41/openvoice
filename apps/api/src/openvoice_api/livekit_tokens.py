@@ -53,6 +53,10 @@ def mint_room_token(
                 can_publish=can_publish,
                 can_subscribe=True,
                 can_publish_data=False,
+                # Audio-only platform: even a SPEAK-capable token may publish
+                # ONLY a microphone track — never camera or screen share. A
+                # client cannot widen this; the grant is signed server-side.
+                can_publish_sources=["microphone"] if can_publish else [],
             )
         )
         .to_jwt()
