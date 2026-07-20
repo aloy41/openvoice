@@ -3081,6 +3081,54 @@
         ]
       }
     },
+    "/api/v1/communities/{community_id}/leave": {
+      "post": {
+        "description": "Remove yourself from a community. The owner cannot leave (they must\ndelete or transfer it), so ownership can never be orphaned (ADR-0005).",
+        "operationId": "leave_community_api_v1_communities__community_id__leave_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "community_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Community Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Leave Community Api V1 Communities  Community Id  Leave Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Leave Community",
+        "tags": [
+          "communities"
+        ]
+      }
+    },
     "/api/v1/communities/{community_id}/members": {
       "get": {
         "operationId": "list_members_api_v1_communities__community_id__members_get",

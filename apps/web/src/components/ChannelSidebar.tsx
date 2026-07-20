@@ -3,10 +3,13 @@ import { useState } from "react";
 import {
   useCreateInvite,
   useDeleteChannel,
+  useDeleteCommunity,
+  useLeaveCommunity,
   useRenameChannel,
   useRenameCommunity,
 } from "../queries";
 import type { ChannelInfo, CommunityDetail } from "../queries";
+import { useSession } from "../session";
 import type { UseVoiceRoom } from "../voice/useVoiceRoom";
 import { Avatar } from "./Avatar";
 import { CreateChannelDialog } from "./CreateChannelDialog";
@@ -18,6 +21,9 @@ interface ChannelSidebarProps {
   onSelectChannel: (id: string) => void;
   unread: Set<string>;
   voice: UseVoiceRoom;
+  // Called after the user deletes or leaves the community so the app can
+  // deselect it and return to the home pane.
+  onCommunityGone: () => void;
 }
 
 export function ChannelSidebar({
@@ -27,11 +33,17 @@ export function ChannelSidebar({
   onSelectChannel,
   unread,
   voice,
+  onCommunityGone,
 }: ChannelSidebarProps) {
+  const { user } = useSession();
   const createInvite = useCreateInvite(detail?.community.id ?? null);
   const renameChannel = useRenameChannel(detail?.community.id ?? null);
   const deleteChannel = useDeleteChannel(detail?.community.id ?? null);
   const renameCommunity = useRenameCommunity(detail?.community.id ?? null);
+  const deleteCommunity = useDeleteCommunity(detail?.community.id ?? null);
+  const leaveCommunity = useLeaveCommunity(detail?.community.id ?? null);
+  const [danger, setDanger] = useState<"delete" | "leave" | null>(null);
+  const isOwner = !!detail && !!user && detail.community.owner_id === user.id;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [communityNameDraft, setCommunityNameDraft] = useState("");
   const [inviteCode, setInviteCode] = useState<string | null>(null);
@@ -217,10 +229,11 @@ export function ChannelSidebar({
           {loading ? "Loading…" : (detail?.community.name ?? "")}
         </h2>
         <div className="flex shrink-0 items-center gap-1">
-          {canManageCommunity && detail && (
+          {detail && (
             <button
               onClick={() => {
                 setCommunityNameDraft(detail.community.name);
+                setDanger(null);
                 setSettingsOpen(true);
               }}
               aria-label="Community settings"
@@ -339,50 +352,150 @@ export function ChannelSidebar({
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
           onClick={() => setSettingsOpen(false)}
         >
-          <form
+          <div
             onClick={(e) => e.stopPropagation()}
-            onSubmit={(e) => {
-              e.preventDefault();
-              const name = communityNameDraft.trim();
-              if (name && name !== detail.community.name) {
-                void renameCommunity.mutateAsync(name).catch(() => undefined);
-              }
-              setSettingsOpen(false);
-            }}
-            className="w-full max-w-sm space-y-4 rounded-lg border border-slate-700 bg-slate-900 p-6"
+            className="w-full max-w-sm space-y-5 rounded-lg border border-slate-700 bg-slate-900 p-6"
           >
             <h2 className="text-base font-semibold">Community settings</h2>
-            <div>
-              <label htmlFor="community-rename" className="block text-sm font-medium text-slate-300">
-                Community name
-              </label>
-              <input
-                id="community-rename"
-                autoFocus
-                value={communityNameDraft}
-                onChange={(e) => setCommunityNameDraft(e.target.value)}
-                maxLength={64}
-                minLength={1}
-                required
-                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              />
+
+            {canManageCommunity && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const name = communityNameDraft.trim();
+                  if (name && name !== detail.community.name) {
+                    void renameCommunity.mutateAsync(name).catch(() => undefined);
+                  }
+                  setSettingsOpen(false);
+                }}
+                className="space-y-3"
+              >
+                <div>
+                  <label
+                    htmlFor="community-rename"
+                    className="block text-sm font-medium text-slate-300"
+                  >
+                    Community name
+                  </label>
+                  <input
+                    id="community-rename"
+                    autoFocus
+                    value={communityNameDraft}
+                    onChange={(e) => setCommunityNameDraft(e.target.value)}
+                    maxLength={64}
+                    minLength={1}
+                    required
+                    className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    className="rounded-md bg-sky-700 px-3 py-2 text-sm font-medium text-white hover:bg-sky-800"
+                  >
+                    Save name
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Danger zone: leave (members) or delete (owner). */}
+            <div className="space-y-2 border-t border-slate-800 pt-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Danger zone
+              </p>
+
+              {!isOwner && danger !== "leave" && (
+                <button
+                  onClick={() => setDanger("leave")}
+                  className="w-full rounded-md border border-amber-800 px-3 py-2 text-sm text-amber-200 hover:bg-amber-950/40"
+                >
+                  Leave community
+                </button>
+              )}
+              {!isOwner && danger === "leave" && (
+                <div className="space-y-2 rounded-md border border-amber-800 bg-amber-950/30 p-3">
+                  <p className="text-sm text-amber-100">
+                    Leave <strong>{detail.community.name}</strong>? You'll need a new invite to
+                    rejoin.
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => setDanger(null)}
+                      className="rounded-md border border-slate-700 px-3 py-1.5 text-sm hover:bg-slate-800"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      disabled={leaveCommunity.isPending}
+                      onClick={() => {
+                        void leaveCommunity
+                          .mutateAsync()
+                          .then(() => {
+                            setSettingsOpen(false);
+                            onCommunityGone();
+                          })
+                          .catch(() => undefined);
+                      }}
+                      className="rounded-md bg-amber-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-800 disabled:opacity-50"
+                    >
+                      {leaveCommunity.isPending ? "Leaving…" : "Leave"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {isOwner && danger !== "delete" && (
+                <button
+                  onClick={() => setDanger("delete")}
+                  className="w-full rounded-md border border-red-800 px-3 py-2 text-sm text-red-300 hover:bg-red-950/40"
+                >
+                  Delete community
+                </button>
+              )}
+              {isOwner && danger === "delete" && (
+                <div className="space-y-2 rounded-md border border-red-800 bg-red-950/30 p-3">
+                  <p className="text-sm text-red-100">
+                    Permanently delete <strong>{detail.community.name}</strong> and all its
+                    channels and messages? This cannot be undone.
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => setDanger(null)}
+                      className="rounded-md border border-slate-700 px-3 py-1.5 text-sm hover:bg-slate-800"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      disabled={deleteCommunity.isPending}
+                      onClick={() => {
+                        void deleteCommunity
+                          .mutateAsync()
+                          .then(() => {
+                            setSettingsOpen(false);
+                            onCommunityGone();
+                          })
+                          .catch(() => undefined);
+                      }}
+                      className="rounded-md bg-red-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-800 disabled:opacity-50"
+                    >
+                      {deleteCommunity.isPending ? "Deleting…" : "Delete forever"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="flex justify-end gap-2">
+
+            <div className="flex justify-end border-t border-slate-800 pt-4">
               <button
                 type="button"
                 onClick={() => setSettingsOpen(false)}
                 className="rounded-md border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800"
               >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="rounded-md bg-sky-700 px-3 py-2 text-sm font-medium text-white hover:bg-sky-800"
-              >
-                Save
+                Close
               </button>
             </div>
-          </form>
+          </div>
         </div>
       )}
     </div>

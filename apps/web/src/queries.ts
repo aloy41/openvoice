@@ -324,6 +324,38 @@ export function useRenameCommunity(communityId: string | null) {
   });
 }
 
+export function useDeleteCommunity(communityId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { error } = await api.DELETE("/api/v1/communities/{community_id}", {
+        params: { path: { community_id: communityId! } },
+      });
+      if (error) throw new Error("Could not delete the community.");
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["communities"] });
+      void qc.removeQueries({ queryKey: ["community", communityId] });
+    },
+  });
+}
+
+export function useLeaveCommunity(communityId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { error } = await api.POST("/api/v1/communities/{community_id}/leave", {
+        params: { path: { community_id: communityId! } },
+      });
+      if (error) throw new Error("Could not leave the community.");
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["communities"] });
+      void qc.removeQueries({ queryKey: ["community", communityId] });
+    },
+  });
+}
+
 export function useCreateChannel(communityId: string | null) {
   const qc = useQueryClient();
   return useMutation({

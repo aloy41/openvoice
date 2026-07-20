@@ -205,6 +205,28 @@ async def test_override_uniqueness_enforced_for_null_target(app: FastAPI, clean_
                 await db.commit()
 
 
+async def test_leave_community(app: FastAPI, clean_db: None) -> None:
+    async with (
+        user_client(app, uname("owner")) as owner,
+        user_client(app, uname("member")) as member,
+    ):
+        detail = await create_community(owner)
+        cid = detail["community"]["id"]
+        code = await make_invite(owner, cid)
+        assert (await member.post("/api/v1/invites/redeem", json={"code": code})).status_code == 200
+
+        # the owner cannot leave (ownership must never be orphaned)
+        owner_leave = await owner.post(f"/api/v1/communities/{cid}/leave")
+        assert owner_leave.status_code == 403
+        assert owner_leave.json()["code"] == "owner_cannot_leave"
+
+        # a member can leave; access disappears and they can rejoin via invite
+        assert (await member.post(f"/api/v1/communities/{cid}/leave")).status_code == 200
+        assert (await member.get(f"/api/v1/communities/{cid}")).status_code == 404
+        assert (await member.post("/api/v1/invites/redeem", json={"code": code})).status_code == 200
+        assert (await member.get(f"/api/v1/communities/{cid}")).status_code == 200
+
+
 async def test_channel_topic_create_and_edit(app: FastAPI, clean_db: None) -> None:
     async with user_client(app, uname("owner")) as owner:
         detail = await create_community(owner)

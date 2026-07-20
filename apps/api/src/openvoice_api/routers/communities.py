@@ -296,6 +296,39 @@ async def delete_community(community_id: uuid.UUID, request: Request) -> dict[st
     return {"status": "deleted"}
 
 
+@router.post("/communities/{community_id}/leave")
+async def leave_community(community_id: uuid.UUID, request: Request) -> dict[str, str]:
+    """Remove yourself from a community. The owner cannot leave (they must
+    delete or transfer it), so ownership can never be orphaned (ADR-0005)."""
+    ctx = await authenticate_unsafe(request)
+    async with request.app.state.sessionmaker() as db:
+        access = await load_access(db, community_id, ctx.user)
+        if access.is_owner:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "owner_cannot_leave",
+                    "message": "The owner cannot leave; delete the community instead.",
+                },
+            )
+        await db.delete(access.membership)
+        record_audit(
+            db,
+            community_id=community_id,
+            actor=ctx.user,
+            action="membership.left",
+            target_type="user",
+            target_id=ctx.user.id,
+        )
+        # membership.removed cuts the leaver's live event stream immediately.
+        envelope = await append_event(
+            db, community_id, "membership.removed", {"user_id": str(ctx.user.id), "kind": "left"}
+        )
+        await db.commit()
+    await publish_event(request.app.state.redis, envelope)
+    return {"status": "left"}
+
+
 @router.post("/communities/{community_id}/channels", response_model=ChannelOut)
 async def create_channel(
     community_id: uuid.UUID, body: ChannelCreate, request: Request

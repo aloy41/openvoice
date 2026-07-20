@@ -426,6 +426,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/communities/{community_id}/leave": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Leave Community
+         * @description Remove yourself from a community. The owner cannot leave (they must
+         *     delete or transfer it), so ownership can never be orphaned (ADR-0005).
+         */
+        post: operations["leave_community_api_v1_communities__community_id__leave_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/communities/{community_id}/members": {
         parameters: {
             query?: never;
@@ -2284,6 +2305,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InviteCreated"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    leave_community_api_v1_communities__community_id__leave_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                community_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
                 };
             };
             /** @description Validation Error */
