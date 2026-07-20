@@ -23,7 +23,12 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 
 from ..authz import load_access, viewable_channel_ids
-from ..events import channel_for, event_envelope_from_row
+from ..events import (
+    AUTHZ_EVENT_PREFIXES,
+    channel_for,
+    event_envelope_from_row,
+    event_visible,
+)
 from ..models import Event, User, UserSession
 from ..presence import (
     PRESENCE_TTL_SECONDS,
@@ -37,25 +42,11 @@ log = logging.getLogger("openvoice.ws")
 
 router = APIRouter()
 
-# Events whose delivery must be gated by per-channel VIEW_CHANNELS.
-CONTENT_EVENT_TYPES = {
-    "message.created",
-    "message.updated",
-    "message.deleted",
-    "message.reaction_updated",
-}
 REPLAY_PAGE = 500
-
-
-def _event_channel_id(envelope: dict[str, object]) -> str | None:
-    payload = envelope.get("payload")
-    if isinstance(payload, dict):
-        if payload.get("channel_id"):
-            return str(payload["channel_id"])
-        message = payload.get("message")
-        if isinstance(message, dict) and message.get("channel_id"):
-            return str(message["channel_id"])
-    return None
+# How often an open socket re-checks that its session is still valid. Bounds
+# how long a revoked session/device keeps receiving events (independent of
+# presence TTL so revocation latency does not depend on presence config).
+AUTH_RECHECK_SECONDS = 15
 
 
 async def _authenticate_ws(websocket: WebSocket) -> User | None:
@@ -100,7 +91,22 @@ async def events_ws(websocket: WebSocket) -> None:
     presence_redis = websocket.app.state.redis
     listener: asyncio.Task[None] | None = None
     heartbeat: asyncio.Task[None] | None = None
+    watchdog: asyncio.Task[None] | None = None
     current_community: str | None = None
+
+    async def run_auth_watchdog() -> None:
+        """Re-validate the session periodically so revoking a session/device
+        (which marks the sessions row revoked in Postgres) tears down an
+        already-open socket instead of letting it keep receiving events until
+        the client happens to reconnect."""
+        while True:
+            await asyncio.sleep(AUTH_RECHECK_SECONDS)
+            if await _authenticate_ws(websocket) is None:
+                with contextlib.suppress(Exception):
+                    await websocket.send_json({"type": "unsubscribed", "code": "session_revoked"})
+                with contextlib.suppress(Exception):
+                    await websocket.close(code=4401)
+                return
 
     async def stop_listener() -> None:
         nonlocal listener
@@ -148,10 +154,7 @@ async def events_ws(websocket: WebSocket) -> None:
             viewable = {str(c) for c in await viewable_channel_ids(db, acc)}
 
     def visible(envelope: dict[str, object]) -> bool:
-        if envelope.get("type") in CONTENT_EVENT_TYPES:
-            ch = _event_channel_id(envelope)
-            return ch is None or ch in viewable
-        return True
+        return event_visible(envelope, viewable)
 
     async def run_subscription(community_id: str, after_seq: int) -> None:
         pubsub = redis.pubsub()
@@ -223,7 +226,7 @@ async def events_ws(websocket: WebSocket) -> None:
                     return
                 # Any permission-affecting change → recompute what's visible so
                 # channel-access removal takes effect immediately, mid-session.
-                if etype.startswith(("role.", "channel.", "membership.", "community.")):
+                if etype.startswith(AUTHZ_EVENT_PREFIXES):
                     await refresh_viewable(community_id)
                 if int(envelope.get("seq", 0)) <= cursor:
                     continue
@@ -234,6 +237,8 @@ async def events_ws(websocket: WebSocket) -> None:
             with contextlib.suppress(Exception):
                 await pubsub.unsubscribe()
                 await pubsub.aclose()
+
+    watchdog = asyncio.create_task(run_auth_watchdog())
 
     try:
         while True:
@@ -295,5 +300,9 @@ async def events_ws(websocket: WebSocket) -> None:
     except Exception:
         log.warning("websocket closed unexpectedly")
     finally:
+        if watchdog is not None:
+            watchdog.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await watchdog
         await stop_listener()
         await leave_presence()

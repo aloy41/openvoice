@@ -324,3 +324,53 @@ the honest boundary: no custom crypto, no unimplemented E2EE claimed.
 | Migration 0009 (sessions.device_id) applies | pass (clean_db path) |
 | OpenAPI + TS client regenerated (challenge/bind-session endpoints) | no drift |
 | `cryptography==45.0.7` pinned in constraints.txt | done |
+
+## 2026-07-19 — Release-blocker hardening pass
+
+**Hardware/OS:** as above (Ryzen 9 7900X, Docker Desktop, loopback network).
+
+Addressed the reported release blockers:
+
+1. **REST event leak closed.** `GET /communities/{id}/events` now applies the
+   same VIEW_CHANNELS filter as the WebSocket via a single shared
+   `event_visible()` (in events.py, used by both paths). Adversarial test:
+   `test_events_endpoint_does_not_leak_hidden_channel_content`.
+2. **Live permission revocation now works.** Role create/update/delete/assign/
+   unassign, channel override set, and channel create/update/delete now emit
+   durable events (previously only audit-logged), so a connected client's
+   viewable set recomputes mid-session. Adversarial test:
+   `test_ws_live_channel_revocation_stops_delivery` (revoke VIEW while the
+   socket is open → the hidden channel's later messages never arrive; a control
+   message on a still-visible channel still does).
+3. **Production TURN relay ports fixed.** docker-compose.prod.yml now publishes
+   `30000-30100/udp` (LiveKit `relay_range`) alongside 3478 and 50000-50100.
+4. **Active session/WS revocation.** Open sockets re-validate their session
+   every `AUTH_RECHECK_SECONDS` (15s); a revoked session/device tears the socket
+   down with a `session_revoked` notice. Test:
+   `test_ws_session_revocation_closes_socket` (recheck monkeypatched fast).
+5. **Concurrent edit/delete locked.** Message load for edit/delete uses
+   `SELECT ... FOR UPDATE`, serializing the two so a delete+edit race resolves
+   to the tombstone instead of a lost update.
+6. **Production images now covered by CI.** The `prod-images` job builds
+   `Dockerfile.prod` and the web/Caddy `Dockerfile.prod`, validates the prod
+   compose config and Caddyfile, and smoke-tests the prod API image against a
+   real Postgres+Redis (migrate + serve /api/healthz).
+7. **Docs corrected.** Architecture overview updated (auth/TURN/realtime/opt-in
+   E2EE are shipped, not future); SECURITY.md reflects the public repo + private
+   reporting flow; README's dead AGENTS.md link removed.
+
+| Check | Result |
+| --- | --- |
+| API: ruff lint + format, mypy --strict | clean (30 source files) |
+| API: pytest (real PostgreSQL/Redis) | 106/106 passed |
+| Shared REST/WS visibility filter | `test_events_endpoint_does_not_leak_hidden_channel_content` |
+| Live channel revocation mid-socket | `test_ws_live_channel_revocation_stops_delivery` |
+| Session revocation closes open socket | `test_ws_session_revocation_closes_socket` |
+
+**Still open / not verified here:** the nightly media workflow (voice E2EE,
+TURN relay, chaos) must be run to count those as verified — dispatched
+separately. Remaining lower-severity debt (roles GET/CSRF ergonomics,
+audio-only publish grant hardening, invite-redemption race, override
+uniqueness, expired-ban behavior, moderation hierarchy) is tracked, not yet
+fixed. An independent security review is still required before a public
+release.

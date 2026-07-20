@@ -147,7 +147,7 @@ tests/e2e/          Playwright end-to-end tests
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md), [`AGENTS.md`](AGENTS.md), and
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) and
 [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md). Core rules: security claims must be
 technically accurate, no custom cryptography, schema changes go through
 migrations, and every behaviour change ships with tests.

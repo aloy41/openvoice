@@ -284,3 +284,119 @@ def test_ws_replay_paginates_beyond_one_page(clean_db: None, monkeypatch) -> Non
                 if len([c for c in contents if c.startswith("m")]) == 6:
                     break
             assert [f"m{i}" for i in range(6)] == [c for c in contents if c.startswith("m")]
+
+
+def test_ws_live_channel_revocation_stops_delivery(clean_db: None) -> None:
+    """Removing VIEW_CHANNELS while the socket is OPEN must stop delivery of
+    that channel's messages immediately — proving the override change emits a
+    durable event that triggers a live viewable-set recompute."""
+    app = create_app(make_settings())
+    with TestClient(app) as client:
+        csrf, owner_session, _, _ = _owner_and_member(client)
+
+        def owner(extra: dict[str, str] | None = None) -> dict[str, str]:
+            return {
+                "x-csrf-token": csrf,
+                "cookie": f"ov_session={owner_session}; ov_csrf={csrf}",
+                **(extra or {}),
+            }
+
+        community = client.post(
+            "/api/v1/communities", json={"name": "Live"}, headers=owner()
+        ).json()
+        cid = community["community"]["id"]
+        general = next(c for c in community["channels"] if c["kind"] == "text")["id"]
+        watched = client.post(
+            f"/api/v1/communities/{cid}/channels",
+            json={"name": "watched", "kind": "text"},
+            headers=owner(),
+        ).json()["id"]
+        roles = client.get(f"/api/v1/communities/{cid}/roles", headers=owner()).json()["roles"]
+        everyone = next(r for r in roles if r["is_everyone"])["id"]
+        code = client.post(
+            f"/api/v1/communities/{cid}/invites",
+            json={"expires_in_hours": 1},
+            headers=owner(),
+        ).json()["code"]
+        client.post("/api/v1/invites/redeem", json={"code": code}, headers={"x-csrf-token": csrf})
+
+        with client.websocket_connect("/api/v1/ws") as ws:
+            ws.send_json({"type": "subscribe", "community_id": cid, "after_seq": 0})
+            assert ws.receive_json()["type"] == "subscribed"
+
+            # While visible, a message in `watched` reaches the member.
+            client.post(
+                f"/api/v1/channels/{watched}/messages",
+                json={"content": "before-revoke"},
+                headers=owner(),
+            )
+            seen_before = False
+            for _ in range(20):
+                msg = ws.receive_json()
+                if msg.get("type") == "event":
+                    content = (msg["event"].get("payload", {}).get("message") or {}).get(
+                        "content", ""
+                    )
+                    if content == "before-revoke":
+                        seen_before = True
+                        break
+            assert seen_before, "message should be delivered while the channel is visible"
+
+            # Revoke VIEW_CHANNELS on `watched` for @everyone (live).
+            assert (
+                client.put(
+                    f"/api/v1/channels/{watched}/overrides",
+                    json={"role_id": everyone, "allow": 0, "deny": VIEW_CHANNELS},
+                    headers=owner(),
+                ).status_code
+                == 200
+            )
+
+            # Post in the now-hidden channel, then a control message in general.
+            client.post(
+                f"/api/v1/channels/{watched}/messages",
+                json={"content": "AFTER-REVOKE-SECRET"},
+                headers=owner(),
+            )
+            client.post(
+                f"/api/v1/channels/{general}/messages",
+                json={"content": "control-visible"},
+                headers=owner(),
+            )
+
+            saw_control = False
+            for _ in range(40):
+                msg = ws.receive_json()
+                if msg.get("type") == "event":
+                    content = (msg["event"].get("payload", {}).get("message") or {}).get(
+                        "content", ""
+                    )
+                    assert "AFTER-REVOKE-SECRET" not in content, (
+                        "revocation did not take effect live"
+                    )
+                    if content == "control-visible":
+                        saw_control = True
+                        break
+            assert saw_control, "control message on a still-visible channel should arrive"
+
+
+def test_ws_session_revocation_closes_socket(clean_db: None, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """An already-open socket must be torn down when its session is revoked,
+    not kept alive until reconnect."""
+    import openvoice_api.routers.ws as ws_mod
+
+    monkeypatch.setattr(ws_mod, "AUTH_RECHECK_SECONDS", 0.2)  # fast recheck for the test
+    app = create_app(make_settings())
+    with TestClient(app) as client:
+        csrf, _owner_session, _, _ = _owner_and_member(client)  # member is in the jar
+
+        with client.websocket_connect("/api/v1/ws") as ws:
+            # Revoke the member's own session (logout marks the row revoked).
+            assert (
+                client.post("/api/v1/auth/logout", headers={"x-csrf-token": csrf}).status_code
+                == 200
+            )
+            # The watchdog re-checks within AUTH_RECHECK_SECONDS and cuts the socket.
+            notice = ws.receive_json()
+            assert notice["type"] == "unsubscribed"
+            assert notice["code"] == "session_revoked"

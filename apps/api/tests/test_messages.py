@@ -107,6 +107,48 @@ async def test_delete_scrubs_content_from_durable_event_log(app: FastAPI, clean_
                 assert message.get("scrubbed") is True
 
 
+async def test_events_endpoint_does_not_leak_hidden_channel_content(
+    app: FastAPI, clean_db: None
+) -> None:
+    """GET /communities/{id}/events must apply the same VIEW_CHANNELS filter as
+    the WebSocket, so the reconnect/replay path cannot leak a hidden channel's
+    message content to a member who cannot see it."""
+    async with (
+        user_client(app, uname("owner")) as owner,
+        user_client(app, uname("member")) as member,
+    ):
+        detail = await create_community(owner)
+        cid = detail["community"]["id"]
+        general = await text_channel_of(owner, cid)
+        # A hidden channel: deny VIEW_CHANNELS to @everyone.
+        secret = (
+            await owner.post(
+                f"/api/v1/communities/{cid}/channels",
+                json={"name": "secret", "kind": "text"},
+            )
+        ).json()["id"]
+        roles = (await owner.get(f"/api/v1/communities/{cid}/roles")).json()["roles"]
+        everyone = next(r for r in roles if r["is_everyone"])["id"]
+        assert (
+            await owner.put(
+                f"/api/v1/channels/{secret}/overrides",
+                json={"role_id": everyone, "allow": 0, "deny": 1 << 0},  # VIEW_CHANNELS
+            )
+        ).status_code == 200
+        code = await make_invite(owner, cid)
+        assert (await member.post("/api/v1/invites/redeem", json={"code": code})).status_code == 200
+
+        await send(owner, secret, "TOP-SECRET-REST-LEAK")
+        await send(owner, general, "public-rest-hello")
+
+        events = (await member.get(f"/api/v1/communities/{cid}/events?after_seq=0")).json()
+        contents = [
+            (e.get("payload", {}).get("message") or {}).get("content", "") for e in events["events"]
+        ]
+        assert "public-rest-hello" in contents
+        assert not any("TOP-SECRET-REST-LEAK" in c for c in contents)
+
+
 async def test_retention_prunes_events_older_than_window(app: FastAPI, clean_db: None) -> None:
     """Old events are pruned so content cannot linger past the retention
     window; recent events are kept for reconnect catch-up."""

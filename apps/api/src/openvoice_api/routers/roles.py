@@ -16,6 +16,7 @@ from sqlalchemy import select
 
 from ..authz import CommunityAccess, load_access, not_found, record_audit
 from ..deps import authenticate_unsafe
+from ..events import append_event, publish_event
 from ..models import Channel, MemberRole, Membership, PermissionOverride, Role
 from ..permissions import ALL_CAPABILITIES, Capability, capability_names
 
@@ -125,8 +126,12 @@ async def create_role(community_id: uuid.UUID, body: RoleCreate, request: Reques
             target_id=role.id,
             meta={"name": body.name, "permissions": body.permissions},
         )
+        # Durable event so connected clients recompute permissions live.
+        envelope = await append_event(db, community_id, "role.created", {"role_id": str(role.id)})
         await db.commit()
-        return _role_out(role)
+        out = _role_out(role)
+    await publish_event(request.app.state.redis, envelope)
+    return out
 
 
 async def _load_role(request: Request, role_id: uuid.UUID) -> uuid.UUID:
@@ -162,8 +167,11 @@ async def update_role(role_id: uuid.UUID, body: RolePatch, request: Request) -> 
             target_id=role.id,
             meta=meta or None,
         )
+        envelope = await append_event(db, community_id, "role.updated", {"role_id": str(role.id)})
         await db.commit()
-        return _role_out(role)
+        out = _role_out(role)
+    await publish_event(request.app.state.redis, envelope)
+    return out
 
 
 @router.delete("/roles/{role_id}")
@@ -191,8 +199,10 @@ async def delete_role(role_id: uuid.UUID, request: Request) -> dict[str, str]:
             target_id=role.id,
             meta={"name": role.name},
         )
+        envelope = await append_event(db, community_id, "role.deleted", {"role_id": str(role.id)})
         await db.delete(role)
         await db.commit()
+    await publish_event(request.app.state.redis, envelope)
     return {"status": "deleted"}
 
 
@@ -225,6 +235,7 @@ async def assign_role(
                 )
             )
         ).scalar_one_or_none()
+        envelope = None
         if existing is None:
             db.add(MemberRole(membership_id=membership.id, role_id=role.id))
             record_audit(
@@ -236,7 +247,15 @@ async def assign_role(
                 target_id=user_id,
                 meta={"role_id": str(role.id), "role_name": role.name},
             )
+            envelope = await append_event(
+                db,
+                community_id,
+                "role.assigned",
+                {"role_id": str(role.id), "user_id": str(user_id)},
+            )
             await db.commit()
+    if envelope is not None:
+        await publish_event(request.app.state.redis, envelope)
     return {"status": "assigned"}
 
 
@@ -275,8 +294,15 @@ async def unassign_role(
             target_id=user_id,
             meta={"role_id": str(role_id)},
         )
+        envelope = await append_event(
+            db,
+            community_id,
+            "role.unassigned",
+            {"role_id": str(role_id), "user_id": str(user_id)},
+        )
         await db.delete(assignment)
         await db.commit()
+    await publish_event(request.app.state.redis, envelope)
     return {"status": "unassigned"}
 
 
@@ -370,5 +396,11 @@ async def set_override(
                 "deny": body.deny,
             },
         )
+        # Minimal payload: enough to trigger a live permission recompute for
+        # the affected channel without broadcasting the allow/deny bits.
+        envelope = await append_event(
+            db, row.community_id, "channel.override_set", {"channel_id": str(channel_id)}
+        )
         await db.commit()
+    await publish_event(request.app.state.redis, envelope)
     return {"status": "set"}

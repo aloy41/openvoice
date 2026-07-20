@@ -61,7 +61,8 @@ services:
     ports:
       - "7881:7881"                     # WebRTC over TCP fallback
       - "3478:3478/udp"                 # TURN/UDP
-      - "50000-50100:50000-50100/udp"   # WebRTC media
+      - "30000-30100:30000-30100/udp"   # TURN relay allocations (relay_range in livekit.yaml)
+      - "50000-50100:50000-50100/udp"   # WebRTC media (port_range in livekit.yaml)
     mem_limit: 1g
 
   api:

@@ -26,6 +26,45 @@ log = logging.getLogger("openvoice.events")
 
 EVENT_VERSION = 1
 
+# Channel-scoped event types whose delivery/replay must be gated by the
+# subscriber's VIEW_CHANNELS permission for the target channel. A member who
+# cannot see a channel must never receive its content — over the WebSocket OR
+# via the REST catch-up endpoint (they share event_visible()).
+CONTENT_EVENT_TYPES = frozenset(
+    {
+        "message.created",
+        "message.updated",
+        "message.deleted",
+        "message.reaction_updated",
+    }
+)
+
+# Event type prefixes that can change what a member may view; receiving one is
+# the signal to recompute the viewable-channel set mid-session.
+AUTHZ_EVENT_PREFIXES = ("role.", "channel.", "membership.", "community.")
+
+
+def event_channel_id(envelope: dict[str, Any]) -> str | None:
+    """The channel a (content) event belongs to, or None if not channel-scoped."""
+    payload = envelope.get("payload")
+    if isinstance(payload, dict):
+        if payload.get("channel_id"):
+            return str(payload["channel_id"])
+        message = payload.get("message")
+        if isinstance(message, dict) and message.get("channel_id"):
+            return str(message["channel_id"])
+    return None
+
+
+def event_visible(envelope: dict[str, Any], viewable_channel_ids: set[str]) -> bool:
+    """True unless this is a channel-scoped content event for a channel the
+    subscriber cannot view. Shared by WebSocket delivery and REST replay so a
+    hidden channel's messages leak through neither path."""
+    if envelope.get("type") in CONTENT_EVENT_TYPES:
+        channel = event_channel_id(envelope)
+        return channel is None or channel in viewable_channel_ids
+    return True
+
 
 def channel_for(community_id: uuid.UUID | str) -> str:
     return f"ov:events:{community_id}"

@@ -17,14 +17,15 @@ the server operator can access. See `docs/security/threat-model.md`.
 
 ## Reporting a vulnerability
 
-While the repository is private, report security issues directly to the
-project owner rather than filing an issue.
+The repository is public. **Do not file a public issue for security
+vulnerabilities.** Instead, report them privately via GitHub's "Report a
+vulnerability" flow (Security → Advisories) on the repository, or directly to
+the project owner.
 
-Before the first public release this policy will be replaced with:
-- a dedicated security contact address,
-- an expected acknowledgment/response SLA,
-- a coordinated disclosure window,
-- a supported-versions table.
+This project is pre-1.0 and maintained without a formal SLA; expect
+best-effort acknowledgment. A future release will add a dedicated security
+contact, a response SLA, a coordinated-disclosure window, and a
+supported-versions table.
 
 Please include: affected component, reproduction steps, impact assessment,
 and any suggested remediation. Do not include real user data in reports.

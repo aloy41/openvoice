@@ -17,11 +17,17 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..authz import load_access, not_found, resolve_channel_capabilities
+from ..authz import (
+    load_access,
+    not_found,
+    resolve_channel_capabilities,
+    viewable_channel_ids,
+)
 from ..deps import authenticate, authenticate_unsafe
 from ..events import (
     append_event,
     event_envelope_from_row,
+    event_visible,
     publish_event,
     scrub_message_from_events,
 )
@@ -232,8 +238,11 @@ async def send_message(channel_id: uuid.UUID, body: MessageCreate, request: Requ
 async def _load_own_or_privileged(
     db: AsyncSession, request: Request, ctx_user: User, message_id: uuid.UUID, need_manage: bool
 ) -> tuple[Message, Channel, Any]:
+    # FOR UPDATE serializes concurrent edit/delete of the SAME message: the
+    # second transaction blocks until the first commits, then re-reads the row
+    # and sees the tombstone (deleted_at) instead of racing a lost update.
     message = (
-        await db.execute(select(Message).where(Message.id == message_id))
+        await db.execute(select(Message).where(Message.id == message_id).with_for_update())
     ).scalar_one_or_none()
     if message is None or message.deleted_at is not None:
         raise not_found()
@@ -370,10 +379,15 @@ async def catch_up_events(
     community_id: uuid.UUID, request: Request, after_seq: int = 0
 ) -> EventListOut:
     """Replay the durable event log after `after_seq` — the reconnect path.
-    Bounded to 500 events per call; clients page by advancing after_seq."""
+    Bounded to 500 events per call; clients page by advancing after_seq.
+
+    SECURITY: filtered by the caller's VIEW_CHANNELS exactly like WebSocket
+    delivery (shared event_visible), so this endpoint cannot leak content for
+    channels the caller cannot see."""
     ctx = await authenticate(request)
     async with request.app.state.sessionmaker() as db:
         access = await load_access(db, community_id, ctx.user)
+        viewable = {str(c) for c in await viewable_channel_ids(db, access)}
         rows = (
             (
                 await db.execute(
@@ -387,4 +401,6 @@ async def catch_up_events(
             .all()
         )
         latest = access.community.event_seq
-    return EventListOut(events=[event_envelope_from_row(e) for e in rows], latest_seq=latest)
+    envelopes = [event_envelope_from_row(e) for e in rows]
+    visible = [e for e in envelopes if event_visible(e, viewable)]
+    return EventListOut(events=visible, latest_seq=latest)

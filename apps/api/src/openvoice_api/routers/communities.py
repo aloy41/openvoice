@@ -335,8 +335,11 @@ async def create_channel(
             target_id=channel.id,
             meta={"name": body.name, "kind": body.kind},
         )
+        envelope = await append_event(
+            db, community_id, "channel.created", {"channel_id": str(channel.id)}
+        )
         await db.commit()
-        return ChannelOut(
+        out = ChannelOut(
             id=channel.id,
             kind=channel.kind,
             name=channel.name,
@@ -344,6 +347,8 @@ async def create_channel(
             parent_id=channel.parent_id,
             capabilities=capability_names(access.base_permissions),
         )
+    await publish_event(request.app.state.redis, envelope)
+    return out
 
 
 async def _load_channel_globally(request: Request, channel_id: uuid.UUID) -> tuple[uuid.UUID, str]:
@@ -380,8 +385,11 @@ async def update_channel(channel_id: uuid.UUID, body: ChannelPatch, request: Req
             target_id=channel.id,
             meta=changes or None,
         )
+        envelope = await append_event(
+            db, community_id, "channel.updated", {"channel_id": str(channel.id)}
+        )
         await db.commit()
-        return ChannelOut(
+        out = ChannelOut(
             id=channel.id,
             kind=channel.kind,
             name=channel.name,
@@ -389,6 +397,8 @@ async def update_channel(channel_id: uuid.UUID, body: ChannelPatch, request: Req
             parent_id=channel.parent_id,
             capabilities=capability_names(access.base_permissions),
         )
+    await publish_event(request.app.state.redis, envelope)
+    return out
 
 
 @router.delete("/channels/{channel_id}")
@@ -408,6 +418,10 @@ async def delete_channel(channel_id: uuid.UUID, request: Request) -> dict[str, s
             target_id=channel.id,
             meta={"name": channel.name, "kind": channel.kind},
         )
+        envelope = await append_event(
+            db, community_id, "channel.deleted", {"channel_id": str(channel.id)}
+        )
         await db.delete(channel)
         await db.commit()
+    await publish_event(request.app.state.redis, envelope)
     return {"status": "deleted"}

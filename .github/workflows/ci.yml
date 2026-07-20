@@ -103,13 +103,77 @@ jobs:
       - name: Dependency audit (npm)
         run: npm audit --audit-level=high
 
-  api-image:
-    name: API — production image builds
+  prod-images:
+    name: Production images — build + smoke test
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: openvoice
+          POSTGRES_PASSWORD: ci-postgres
+          POSTGRES_DB: openvoice
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U openvoice" --health-interval 5s
+          --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s
+          --health-timeout 3s --health-retries 10
     steps:
       - uses: actions/checkout@v5
-      - name: Build image
-        run: docker build -t openvoice-api:ci apps/api
+
+      # Build the ACTUAL production images (not the dev Dockerfile).
+      - name: Build production API image
+        run: docker build -f apps/api/Dockerfile.prod -t openvoice-api:prod apps/api
+      - name: Build production web/Caddy image
+        run: docker build -f infra/caddy/Dockerfile.prod -t openvoice-web:prod .
+
+      # Validate the production compose file and the production Caddyfile.
+      - name: Validate production compose config
+        env:
+          OPENVOICE_DOMAIN: chat.example.com
+          OPENVOICE_ACME_EMAIL: admin@example.com
+          OPENVOICE_SECRET_KEY: ci-only-secret-key-0123456789abcdef0123456789abcdef
+          POSTGRES_PASSWORD: ci-postgres
+          LIVEKIT_API_KEY: devkey
+          LIVEKIT_API_SECRET: ci-only-livekit-secret-0123456789abcdef
+          LIVEKIT_NODE_IP: 203.0.113.10
+        run: docker compose -f docker-compose.prod.yml config >/dev/null
+      - name: Validate production Caddyfile
+        run: |
+          docker run --rm -e OPENVOICE_DOMAIN=chat.example.com \
+            -e OPENVOICE_ACME_EMAIL=admin@example.com \
+            openvoice-web:prod caddy validate --config /etc/caddy/Caddyfile
+
+      # Smoke-test the production API image: it must migrate and serve against
+      # a real Postgres + Redis. (The full prod stack's Caddy needs a public
+      # domain for ACME, so we exercise the API image directly here.)
+      - name: Smoke test production API image
+        run: |
+          docker run -d --name ov-api-prod --network host \
+            -e OPENVOICE_ENVIRONMENT=production \
+            -e OPENVOICE_DEV_AUTH_ENABLED=false \
+            -e OPENVOICE_SECRET_KEY=ci-only-secret-key-0123456789abcdef0123456789abcdef \
+            -e OPENVOICE_DATABASE_URL=postgresql+asyncpg://openvoice:ci-postgres@localhost:5432/openvoice \
+            -e OPENVOICE_REDIS_URL=redis://localhost:6379/0 \
+            -e OPENVOICE_LIVEKIT_API_KEY=devkey \
+            -e OPENVOICE_LIVEKIT_API_SECRET=ci-only-livekit-secret-0123456789abcdef \
+            -e OPENVOICE_LIVEKIT_WS_URL=origin \
+            openvoice-api:prod
+          for _ in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/api/healthz >/dev/null 2>&1; then
+              echo "prod API image healthy"; exit 0
+            fi
+            sleep 2
+          done
+          echo "prod API image did not become healthy"; docker logs ov-api-prod; exit 1
+      - name: Prod API logs on failure
+        if: failure()
+        run: docker logs ov-api-prod || true
 
   secrets:
     name: Secret scanning (gitleaks)
