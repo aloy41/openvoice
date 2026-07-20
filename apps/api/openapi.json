@@ -2656,7 +2656,7 @@
     },
     "/api/v1/communities/{community_id}/events": {
       "get": {
-        "description": "Replay the durable event log after `after_seq` \u2014 the reconnect path.\nBounded to 500 events per call; clients page by advancing after_seq.",
+        "description": "Replay the durable event log after `after_seq` \u2014 the reconnect path.\nBounded to 500 events per call; clients page by advancing after_seq.\n\nSECURITY: filtered by the caller's VIEW_CHANNELS exactly like WebSocket\ndelivery (shared event_visible), so this endpoint cannot leak content for\nchannels the caller cannot see.",
         "operationId": "catch_up_events_api_v1_communities__community_id__events_get",
         "parameters": [
           {

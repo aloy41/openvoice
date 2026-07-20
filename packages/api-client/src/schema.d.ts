@@ -354,6 +354,10 @@ export interface paths {
          * Catch Up Events
          * @description Replay the durable event log after `after_seq` — the reconnect path.
          *     Bounded to 500 events per call; clients page by advancing after_seq.
+         *
+         *     SECURITY: filtered by the caller's VIEW_CHANNELS exactly like WebSocket
+         *     delivery (shared event_visible), so this endpoint cannot leak content for
+         *     channels the caller cannot see.
          */
         get: operations["catch_up_events_api_v1_communities__community_id__events_get"];
         put?: never;
