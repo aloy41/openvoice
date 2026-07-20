@@ -171,12 +171,14 @@ export function CommunityApp() {
   const [selectedMic, setSelectedMic] = useState("");
   const [selectedOutput, setSelectedOutput] = useState("");
 
-  const refreshDevices = useCallback(async () => {
+  // Browsers hide device labels (and often the devices themselves) until the
+  // page has been granted microphone access. `prompt` asks LiveKit to call
+  // getUserMedia first so enumeration returns real, labelled devices — used
+  // when the voice UI opens, so mics show up without having to run a mic test.
+  const refreshDevices = useCallback(async (prompt = false) => {
     try {
-      const [inputs, outs] = await Promise.all([
-        Room.getLocalDevices("audioinput", false),
-        Room.getLocalDevices("audiooutput", false),
-      ]);
+      const inputs = await Room.getLocalDevices("audioinput", prompt);
+      const outs = await Room.getLocalDevices("audiooutput", false);
       setMics(inputs);
       setOutputs(outs);
       setSelectedMic((cur) =>
@@ -186,9 +188,13 @@ export function CommunityApp() {
         cur && outs.some((d) => d.deviceId === cur) ? cur : (outs[0]?.deviceId ?? ""),
       );
     } catch {
-      // Device enumeration unsupported — selectors stay empty; join still works.
+      // Permission denied or enumeration unsupported — selectors stay empty
+      // and the mic test / join flow can still request access later.
     }
   }, []);
+
+  // Stable so the voice workspace's mount effect doesn't re-prompt each render.
+  const primeDevices = useCallback(() => void refreshDevices(true), [refreshDevices]);
 
   useEffect(() => {
     void refreshDevices();
@@ -283,6 +289,7 @@ export function CommunityApp() {
                     void voice.switchOutputDevice(id);
                   }}
                   onPermissionGranted={refreshDevices}
+                  primeDevices={primeDevices}
                 />
               )}
             </div>

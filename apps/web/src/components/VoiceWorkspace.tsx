@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { ChannelInfo } from "../queries";
 import type { UseVoiceRoom } from "../voice/useVoiceRoom";
@@ -19,6 +19,8 @@ interface VoiceWorkspaceProps {
   onMicChange: (id: string) => void;
   onOutputChange: (id: string) => void;
   onPermissionGranted: () => void;
+  // Requests mic permission (if needed) and re-enumerates so device names show.
+  primeDevices: () => void;
 }
 
 export function VoiceWorkspace({
@@ -31,8 +33,16 @@ export function VoiceWorkspace({
   onMicChange,
   onOutputChange,
   onPermissionGranted,
+  primeDevices,
 }: VoiceWorkspaceProps) {
   const [passphrase, setPassphrase] = useState("");
+
+  // Opening a voice channel is the right moment to ask for microphone access,
+  // so the device dropdowns populate with real names immediately instead of
+  // staying empty until the mic test is run.
+  useEffect(() => {
+    primeDevices();
+  }, [primeDevices]);
   const inThisChannel = voice.channel?.id === channel.id;
   const inRoomHere =
     inThisChannel && (voice.status === "connected" || voice.status === "reconnecting");
