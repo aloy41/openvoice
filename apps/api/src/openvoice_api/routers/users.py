@@ -24,6 +24,8 @@ class ProfileOut(BaseModel):
     accent_color: str | None
     pronouns: str | None
     bio: str | None
+    status_emoji: str | None
+    status_text: str | None
 
 
 class ProfilePatch(BaseModel):
@@ -31,6 +33,8 @@ class ProfilePatch(BaseModel):
     accent_color: str | None = Field(default=None, max_length=7)
     pronouns: str | None = Field(default=None, max_length=40)
     bio: str | None = Field(default=None, max_length=280)
+    status_emoji: str | None = Field(default=None, max_length=32)
+    status_text: str | None = Field(default=None, max_length=128)
 
 
 def _out(u: User) -> ProfileOut:
@@ -41,6 +45,8 @@ def _out(u: User) -> ProfileOut:
         accent_color=u.accent_color,
         pronouns=u.pronouns,
         bio=u.bio,
+        status_emoji=u.status_emoji,
+        status_text=u.status_text,
     )
 
 
@@ -72,6 +78,10 @@ async def update_me(body: ProfilePatch, request: Request) -> ProfileOut:
             user.pronouns = (fields["pronouns"] or "").strip() or None
         if "bio" in fields:
             user.bio = (fields["bio"] or "").strip() or None
+        if "status_emoji" in fields:
+            user.status_emoji = (fields["status_emoji"] or "").strip() or None
+        if "status_text" in fields:
+            user.status_text = (fields["status_text"] or "").strip() or None
         await db.commit()
         await db.refresh(user)
         return _out(user)

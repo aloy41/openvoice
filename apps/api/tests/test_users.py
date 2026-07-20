@@ -36,6 +36,29 @@ async def test_edit_and_read_own_profile(app: FastAPI, clean_db: None) -> None:
         assert session.json()["user"]["accent_color"] == "#3b82f6"
 
 
+async def test_custom_status_set_clear_and_public(app: FastAPI, clean_db: None) -> None:
+    async with (
+        user_client(app, uname("me")) as me,
+        user_client(app, uname("other")) as other,
+    ):
+        set_resp = await me.patch(
+            "/api/v1/users/me", json={"status_emoji": "🎧", "status_text": "in a call"}
+        )
+        assert set_resp.status_code == 200
+        assert set_resp.json()["status_emoji"] == "🎧"
+        assert set_resp.json()["status_text"] == "in a call"
+
+        # visible on the public profile card
+        me_id = set_resp.json()["id"]
+        card = (await other.get(f"/api/v1/users/{me_id}")).json()
+        assert card["status_text"] == "in a call"
+
+        # clearing with empty strings resets to null
+        cleared = await me.patch("/api/v1/users/me", json={"status_emoji": "", "status_text": ""})
+        assert cleared.json()["status_emoji"] is None
+        assert cleared.json()["status_text"] is None
+
+
 async def test_invalid_color_is_dropped_not_stored(app: FastAPI, clean_db: None) -> None:
     async with user_client(app, uname("me")) as c:
         # length-valid but not a hex colour → silently dropped to null

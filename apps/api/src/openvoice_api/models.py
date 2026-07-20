@@ -41,6 +41,9 @@ class User(Base):
     accent_color: Mapped[str | None] = mapped_column(String(7), nullable=True)  # "#rrggbb"
     pronouns: Mapped[str | None] = mapped_column(String(40), nullable=True)
     bio: Mapped[str | None] = mapped_column(String(280), nullable=True)
+    # Custom status: a short line + optional emoji shown next to the name.
+    status_emoji: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    status_text: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

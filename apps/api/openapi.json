@@ -1288,6 +1288,28 @@
             ],
             "title": "Pronouns"
           },
+          "status_emoji": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Emoji"
+          },
+          "status_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Text"
+          },
           "username": {
             "title": "Username",
             "type": "string"
@@ -1299,7 +1321,9 @@
           "display_name",
           "accent_color",
           "pronouns",
-          "bio"
+          "bio",
+          "status_emoji",
+          "status_text"
         ],
         "title": "ProfileOut",
         "type": "object"
@@ -1354,6 +1378,30 @@
               }
             ],
             "title": "Pronouns"
+          },
+          "status_emoji": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Emoji"
+          },
+          "status_text": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Text"
           }
         },
         "title": "ProfilePatch",

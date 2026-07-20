@@ -1224,6 +1224,10 @@ export interface components {
             id: string;
             /** Pronouns */
             pronouns: string | null;
+            /** Status Emoji */
+            status_emoji: string | null;
+            /** Status Text */
+            status_text: string | null;
             /** Username */
             username: string;
         };
@@ -1237,6 +1241,10 @@ export interface components {
             display_name?: string | null;
             /** Pronouns */
             pronouns?: string | null;
+            /** Status Emoji */
+            status_emoji?: string | null;
+            /** Status Text */
+            status_text?: string | null;
         };
         /** ReactionAdd */
         ReactionAdd: {
