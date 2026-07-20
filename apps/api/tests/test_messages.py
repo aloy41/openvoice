@@ -270,6 +270,40 @@ async def test_pin_and_unpin(app: FastAPI, clean_db: None) -> None:
         assert (await owner.get(f"/api/v1/channels/{channel_id}/pins")).json()["messages"] == []
 
 
+async def test_channel_read_state_and_unreads(app: FastAPI, clean_db: None) -> None:
+    async with (
+        user_client(app, uname("owner")) as owner,
+        user_client(app, uname("member")) as member,
+    ):
+        detail = await create_community(owner)
+        cid = detail["community"]["id"]
+        code = await make_invite(owner, cid)
+        assert (await member.post("/api/v1/invites/redeem", json={"code": code})).status_code == 200
+        channel_id = await text_channel_of(owner, cid)
+
+        # owner posts two messages; member has read nothing → unread.
+        await send(owner, channel_id, "first")
+        second = await send(owner, channel_id, "second")
+
+        unreads = (await member.get(f"/api/v1/communities/{cid}/unreads")).json()["channels"]
+        this = next(c for c in unreads if c["channel_id"] == channel_id)
+        assert this["unread"] is True
+        assert this["last_read_message_id"] is None
+
+        # member marks read up to the newest message → no longer unread.
+        marked = await member.put(f"/api/v1/channels/{channel_id}/read", json={})
+        assert marked.status_code == 200
+        assert marked.json()["last_read_message_id"] == second["id"]
+
+        unreads = (await member.get(f"/api/v1/communities/{cid}/unreads")).json()["channels"]
+        assert next(c for c in unreads if c["channel_id"] == channel_id)["unread"] is False
+
+        # a new message makes it unread again.
+        await send(owner, channel_id, "third")
+        unreads = (await member.get(f"/api/v1/communities/{cid}/unreads")).json()["channels"]
+        assert next(c for c in unreads if c["channel_id"] == channel_id)["unread"] is True
+
+
 async def test_manage_messages_moderator_delete(app: FastAPI, clean_db: None) -> None:
     async with (
         user_client(app, uname("owner")) as owner,

@@ -236,6 +236,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/channels/{channel_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Mark Channel Read
+         * @description Record how far the caller has read in a channel. Idempotent upsert.
+         */
+        put: operations["mark_channel_read_api_v1_channels__channel_id__read_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/channels/{channel_id}/voice-token": {
         parameters: {
             query?: never;
@@ -487,6 +507,28 @@ export interface paths {
         put?: never;
         /** Create Role */
         post: operations["create_role_api_v1_communities__community_id__roles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/communities/{community_id}/unreads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Community Unreads
+         * @description Per-channel unread state for every text channel the caller can view. A
+         *     channel is unread when its newest live message id is greater than the
+         *     caller's last-read marker (UUIDv7 ids sort by time).
+         */
+        get: operations["community_unreads_api_v1_communities__community_id__unreads_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -844,6 +886,18 @@ export interface components {
             /** Topic */
             topic?: string | null;
         };
+        /** ChannelUnread */
+        ChannelUnread: {
+            /**
+             * Channel Id
+             * Format: uuid
+             */
+            channel_id: string;
+            /** Last Read Message Id */
+            last_read_message_id: string | null;
+            /** Unread */
+            unread: boolean;
+        };
         /** CommunityCreate */
         CommunityCreate: {
             /** Name */
@@ -1019,6 +1073,11 @@ export interface components {
             password: string;
             /** Username */
             username: string;
+        };
+        /** MarkRead */
+        MarkRead: {
+            /** Last Read Message Id */
+            last_read_message_id?: string | null;
         };
         /** MemberListOut */
         MemberListOut: {
@@ -1282,6 +1341,11 @@ export interface components {
         SessionListResponse: {
             /** Sessions */
             sessions: components["schemas"]["SessionInfo"][];
+        };
+        /** UnreadListOut */
+        UnreadListOut: {
+            /** Channels */
+            channels: components["schemas"]["ChannelUnread"][];
         };
         /** ValidationError */
         ValidationError: {
@@ -1760,6 +1824,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PinListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_channel_read_api_v1_channels__channel_id__read_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channel_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkRead"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelUnread"];
                 };
             };
             /** @description Validation Error */
@@ -2409,6 +2508,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RoleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    community_unreads_api_v1_communities__community_id__unreads_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                community_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnreadListOut"];
                 };
             };
             /** @description Validation Error */

@@ -374,6 +374,38 @@
         "title": "ChannelPatch",
         "type": "object"
       },
+      "ChannelUnread": {
+        "properties": {
+          "channel_id": {
+            "format": "uuid",
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "last_read_message_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Read Message Id"
+          },
+          "unread": {
+            "title": "Unread",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "channel_id",
+          "unread",
+          "last_read_message_id"
+        ],
+        "title": "ChannelUnread",
+        "type": "object"
+      },
       "CommunityCreate": {
         "properties": {
           "name": {
@@ -857,6 +889,24 @@
           "password"
         ],
         "title": "LoginRequest",
+        "type": "object"
+      },
+      "MarkRead": {
+        "properties": {
+          "last_read_message_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Read Message Id"
+          }
+        },
+        "title": "MarkRead",
         "type": "object"
       },
       "MemberListOut": {
@@ -1595,6 +1645,22 @@
         "title": "SessionListResponse",
         "type": "object"
       },
+      "UnreadListOut": {
+        "properties": {
+          "channels": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelUnread"
+            },
+            "title": "Channels",
+            "type": "array"
+          }
+        },
+        "required": [
+          "channels"
+        ],
+        "title": "UnreadListOut",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -2311,6 +2377,60 @@
           }
         },
         "summary": "List Pins",
+        "tags": [
+          "messages"
+        ]
+      }
+    },
+    "/api/v1/channels/{channel_id}/read": {
+      "put": {
+        "description": "Record how far the caller has read in a channel. Idempotent upsert.",
+        "operationId": "mark_channel_read_api_v1_channels__channel_id__read_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "channel_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Channel Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkRead"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelUnread"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mark Channel Read",
         "tags": [
           "messages"
         ]
@@ -3279,6 +3399,50 @@
         "summary": "Create Role",
         "tags": [
           "roles"
+        ]
+      }
+    },
+    "/api/v1/communities/{community_id}/unreads": {
+      "get": {
+        "description": "Per-channel unread state for every text channel the caller can view. A\nchannel is unread when its newest live message id is greater than the\ncaller's last-read marker (UUIDv7 ids sort by time).",
+        "operationId": "community_unreads_api_v1_communities__community_id__unreads_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "community_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Community Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnreadListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Community Unreads",
+        "tags": [
+          "messages"
         ]
       }
     },

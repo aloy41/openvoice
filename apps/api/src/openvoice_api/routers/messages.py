@@ -15,6 +15,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..authz import (
@@ -31,7 +32,7 @@ from ..events import (
     publish_event,
     scrub_message_from_events,
 )
-from ..models import Channel, Event, Message, MessageReaction, User
+from ..models import Channel, ChannelRead, Event, Message, MessageReaction, User
 from ..permissions import Capability
 from ..rate_limit import check_rate_limit
 
@@ -550,6 +551,131 @@ async def list_pins(channel_id: uuid.UUID, request: Request) -> PinListOut:
         for m, name, color in rows
     ]
     return PinListOut(messages=messages)
+
+
+class MarkRead(BaseModel):
+    # Omit to mark the channel read up to its newest message.
+    last_read_message_id: uuid.UUID | None = None
+
+
+class ChannelUnread(BaseModel):
+    channel_id: uuid.UUID
+    unread: bool
+    last_read_message_id: uuid.UUID | None
+
+
+class UnreadListOut(BaseModel):
+    channels: list[ChannelUnread]
+
+
+@router.put("/channels/{channel_id}/read", response_model=ChannelUnread)
+async def mark_channel_read(
+    channel_id: uuid.UUID, body: MarkRead, request: Request
+) -> ChannelUnread:
+    """Record how far the caller has read in a channel. Idempotent upsert."""
+    ctx = await authenticate_unsafe(request)
+    async with request.app.state.sessionmaker() as db:
+        channel = await _load_text_channel(db, request, channel_id)
+        access = await load_access(db, channel.community_id, ctx.user)
+        caps = await resolve_channel_capabilities(db, access, channel)
+        if not caps & Capability.VIEW_CHANNELS:
+            raise not_found()
+        last_id = body.last_read_message_id
+        if last_id is None:
+            # Newest live message. UUIDv7 ids sort by time, but Postgres has no
+            # max(uuid) aggregate — order by id desc and take the first.
+            last_id = (
+                await db.execute(
+                    select(Message.id)
+                    .where(Message.channel_id == channel_id, Message.deleted_at.is_(None))
+                    .order_by(Message.id.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+        elif (
+            await db.execute(
+                select(Message.id).where(Message.id == last_id, Message.channel_id == channel_id)
+            )
+        ).scalar_one_or_none() is None:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "invalid_read_marker",
+                    "message": "last_read_message_id must be a message in this channel.",
+                },
+            )
+        now = datetime.now(tz=UTC)
+        stmt = pg_insert(ChannelRead).values(
+            user_id=ctx.user.id,
+            channel_id=channel_id,
+            last_read_message_id=last_id,
+            last_read_at=now,
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[ChannelRead.user_id, ChannelRead.channel_id],
+            set_={"last_read_message_id": last_id, "last_read_at": now},
+        )
+        await db.execute(stmt)
+        await db.commit()
+    return ChannelUnread(channel_id=channel_id, unread=False, last_read_message_id=last_id)
+
+
+@router.get("/communities/{community_id}/unreads", response_model=UnreadListOut)
+async def community_unreads(community_id: uuid.UUID, request: Request) -> UnreadListOut:
+    """Per-channel unread state for every text channel the caller can view. A
+    channel is unread when its newest live message id is greater than the
+    caller's last-read marker (UUIDv7 ids sort by time)."""
+    ctx = await authenticate(request)
+    async with request.app.state.sessionmaker() as db:
+        access = await load_access(db, community_id, ctx.user)
+        viewable = await viewable_channel_ids(db, access)
+        text_channel_ids = [
+            c.id
+            for c in (
+                await db.execute(
+                    select(Channel).where(
+                        Channel.community_id == community_id, Channel.kind == "text"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+            if c.id in viewable
+        ]
+        if not text_channel_ids:
+            return UnreadListOut(channels=[])
+        # Newest live message per channel via DISTINCT ON (no max(uuid) in PG).
+        latest_rows = (
+            await db.execute(
+                select(Message.channel_id, Message.id)
+                .where(Message.channel_id.in_(text_channel_ids), Message.deleted_at.is_(None))
+                .order_by(Message.channel_id, Message.id.desc())
+                .distinct(Message.channel_id)
+            )
+        ).all()
+        latest = {cid: mid for cid, mid in latest_rows}
+        read_rows = (
+            (
+                await db.execute(
+                    select(ChannelRead).where(
+                        ChannelRead.user_id == ctx.user.id,
+                        ChannelRead.channel_id.in_(text_channel_ids),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        marks = {r.channel_id: r.last_read_message_id for r in read_rows}
+    channels = []
+    for cid in text_channel_ids:
+        newest = latest.get(cid)
+        last_read = marks.get(cid)
+        unread = newest is not None and (last_read is None or newest > last_read)
+        channels.append(
+            ChannelUnread(channel_id=cid, unread=unread, last_read_message_id=last_read)
+        )
+    return UnreadListOut(channels=channels)
 
 
 @router.get("/communities/{community_id}/events", response_model=EventListOut)

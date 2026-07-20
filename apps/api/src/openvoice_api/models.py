@@ -343,6 +343,27 @@ class MessageReaction(Base):
     )
 
 
+class ChannelRead(Base):
+    """Per-user read marker for a channel. `last_read_message_id` is compared
+    against the channel's newest message id (UUIDv7 is time-sortable) to derive
+    unread state without storing a counter."""
+
+    __tablename__ = "channel_reads"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    channel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("channels.id", ondelete="CASCADE"), primary_key=True
+    )
+    last_read_message_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("messages.id", ondelete="SET NULL"), nullable=True
+    )
+    last_read_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
 class Event(Base):
     """Durable, per-community ordered event log. Reconnecting clients replay
     from their last seen seq instead of trusting missed WebSocket frames."""
